@@ -239,3 +239,6 @@ fabric.properties
 
 # User-installed libraries
 ompl/
+
+# project directories with logs/data
+notebooks/data/
