@@ -1,9 +1,21 @@
 import math
+from enum import Enum
 
 from sympy.combinatorics.graycode import GrayCode
 import networkx as nx
 import numpy as np
 import copy
+
+
+class MidCuboidRegions(Enum):
+    PASSAGE1 = 0
+    CENTER = 1
+    PASSAGE2 = 2
+
+
+class EndCuboidRegions(Enum):
+    PASSAGE = 3
+    CENTER = 4
 
 
 class GrayCodeWalls:
@@ -20,7 +32,7 @@ class GrayCodeWalls:
         gray_coords_reversed = copy.deepcopy(gray_coords)
         gray_coords_reversed.reverse()
 
-        self.no_walls_linear_list = [] # we'll hold onto this because the ordering start -> end is helpful
+        self.no_walls_linear_list = []  # we'll hold onto this because the ordering start -> end is helpful
         for i in range(length):
             if i % 2 == 0:
                 self.no_walls_linear_list += self._prepend_coord(i, gray_coords)
@@ -36,26 +48,46 @@ class GrayCodeWalls:
 
         # initialize all the random number generators that we'll need for sampling
         # we pre-process all probability values to speed up computation later
-        vol_center = math.pow(0.5 - 2 * thickness, dim)
-        vol_open_wall = thickness * math.pow(0.5 - 2 * thickness, dim - 1)
+        self.cube_center_lengths = np.ones(dim) * (0.5 - 2 * thickness)
+
+        self.open_wall_lengths = copy.deepcopy(self.cube_center_lengths)
+        self.open_wall_lengths[0] = thickness
+
+        vol_center = np.prod(self.cube_center_lengths)
+        vol_open_wall = np.prod(self.open_wall_lengths)
         vol_end_passage = vol_center + vol_open_wall
         vol_mid_passage = vol_center + 2 * vol_open_wall
 
-        n_nodes = self.no_walls_graph.number_of_nodes()
-        total_volume = (n_nodes - 2) * vol_mid_passage + 2 * vol_end_passage
+        self.n_nodes = len(self.no_walls_linear_list)
+        total_volume = (self.n_nodes - 2) * vol_mid_passage + 2 * vol_end_passage
 
         self.rng = np.random.default_rng()
 
         # probability a sample falls in an end passage/mid passage
-        self.prob_end_passage = vol_end_passage / total_volume  # this is the probability of one _specific_ end passage
-        self.prob_mid_passage = vol_mid_passage / total_volume
+        prob_end_passage = vol_end_passage / total_volume  # this is the probability of one _specific_ end passage
+        prob_mid_passage = vol_mid_passage / total_volume
+
+        self.cuboid_pmf_vect = np.array(
+            [prob_end_passage]
+            + [prob_mid_passage] * (self.n_nodes - 2)
+            + [prob_end_passage]
+        )
 
         # probability a sample falls in cube center/space opened by absence of wall
-        self.prob_center_in_end_passage = vol_center / vol_end_passage
-        self.prob_open_wall_in_end_passage = vol_open_wall / vol_end_passage
+        prob_center_in_end_passage = vol_center / vol_end_passage
+        prob_open_wall_in_end_passage = vol_open_wall / vol_end_passage
 
-        self.prob_center_in_mid_passage = vol_center / vol_mid_passage
-        self.prob_open_wall_in_end_passage = vol_open_wall / vol_mid_passage
+        prob_center_in_mid_passage = vol_center / vol_mid_passage
+        prob_open_wall_in_mid_passage = vol_open_wall / vol_mid_passage
+
+        self.mid_passage_regions_pmf_vect = np.array(
+            [prob_open_wall_in_mid_passage]
+            + [prob_center_in_mid_passage]
+            + [prob_open_wall_in_mid_passage])  # vector is ordered in transversal of the hamiltonion path
+
+        self.end_passage_regions_pmf_vect = np.array(
+            [prob_center_in_end_passage] + [prob_open_wall_in_end_passage]
+        )  # can do the order here, so it's center -> open wall
 
         # we'll need these in later computations
         self.dim = dim
@@ -91,10 +123,44 @@ class GrayCodeWalls:
 
     def sample_from_env(self):
         # first, sample which cuboid we will land
+        sampled_cuboid_coords = self.rng.choice(
+            self.no_walls_linear_list,
+            p=self.cuboid_pmf_vect
+        )
 
         # next, sample if we are in the center or (one of/only) open wall in selected cuboid
+        if (sampled_cuboid_coords == self.no_walls_linear_list[0]
+                or sampled_cuboid_coords == self.no_walls_linear_list[-1]):
+            sampled_region = self.rng.choice(
+                [EndCuboidRegions.CENTER, EndCuboidRegions.PASSAGE],
+                p=self.end_passage_regions_pmf_vect
+            )
+        else:
+            sampled_region = self.rng.choice(
+                [MidCuboidRegions.PASSAGE1, MidCuboidRegions.CENTER, MidCuboidRegions.PASSAGE2],
+                p=self.mid_passage_regions_pmf_vect
+            )
 
-        # sample point from the defined region and then return it
+        # sample point from the defined region (sample from a box then do coord scale)
+        # and then transform back
+        unit_cube_sample = self.rng.uniform(size=(self.dim,))
+
+        if sampled_region == EndCuboidRegions.CENTER or sampled_region == MidCuboidRegions.CENTER:
+            region_sample = unit_cube_sample * self.cube_center_lengths
+
+            # since the center case is all the same, we can transform back immediately.
+            # translate coords to the center of the cube
+            region_sample -= np.ones(self.dim) * 0.25
+
+            # then translate to the global coord frame using the selected cuboid
+            return region_sample + np.ones(self.dim) * 0.5 * np.array(sampled_cuboid_coords)
+
+        else:
+            region_sample = unit_cube_sample * self.open_wall_lengths
+
+        # transform the sampled point back to the global coordinates
+
+
         pass
 
     @staticmethod
