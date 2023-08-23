@@ -1,4 +1,4 @@
-from nonasymptotic.envs import GrayCodePathWalls
+from nonasymptotic.envs import GrayCodeWalls
 
 from sympy.combinatorics.graycode import GrayCode
 import networkx as nx
@@ -8,7 +8,7 @@ from pytest import approx
 
 
 class Test3dGrayCodeEnv:
-    env = GrayCodePathWalls(3, 4, 0)
+    env = GrayCodeWalls(3, 4, 0)
     gray_coords = [
         tuple(
             map(lambda s: int(s), [*gray_str])
