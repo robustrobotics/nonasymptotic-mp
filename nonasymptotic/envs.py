@@ -157,7 +157,7 @@ class GrayCodeWalls:
             region_sample = unit_cube_sample * self.open_wall_lengths  # the short side is in the 0th dimension
 
             # exchange axes to reflect to the correct orientation
-            ix = 0 if sampled_region == EndCuboidRegions.PASSAGE or MidCuboidRegions.PASSAGE1 else 1
+            ix = 0 if sampled_region == EndCuboidRegions.PASSAGE or sampled_region == MidCuboidRegions.PASSAGE1 else 1
             adjoined_cuboid_coords = self.no_walls_graph.neighbors(sampled_cuboid_coords)[ix]
 
             # find direction (e.g. dimension) cuboid of open wall (sign says if positive or negative direction)
