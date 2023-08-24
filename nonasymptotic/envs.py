@@ -1,10 +1,9 @@
-import math
-from enum import Enum
-
 from sympy.combinatorics.graycode import GrayCode
 import networkx as nx
 import numpy as np
+
 import copy
+from enum import Enum
 
 
 class MidCuboidRegions(Enum):
@@ -153,15 +152,29 @@ class GrayCodeWalls:
             region_sample -= np.ones(self.dim) * 0.25
 
             # then translate to the global coord frame using the selected cuboid
-            return region_sample + np.ones(self.dim) * 0.5 * np.array(sampled_cuboid_coords)
 
         else:
-            region_sample = unit_cube_sample * self.open_wall_lengths
+            region_sample = unit_cube_sample * self.open_wall_lengths  # the short side is in the 0th dimension
 
-        # transform the sampled point back to the global coordinates
+            # exchange axes to reflect to the correct orientation
+            ix = 0 if sampled_region == EndCuboidRegions.PASSAGE or MidCuboidRegions.PASSAGE1 else 1
+            adjoined_cuboid_coords = self.no_walls_graph.neighbors(sampled_cuboid_coords)[ix]
 
+            # find direction (e.g. dimension) cuboid of open wall (sign says if positive or negative direction)
+            open_wall_dir = np.array(adjoined_cuboid_coords) - np.array(sampled_cuboid_coords)
+            open_wall_dir_ind = np.where(open_wall_dir)
+            open_wall_dir_sign = open_wall_dir[open_wall_dir_ind]
 
-        pass
+            # swap indices to reflect to the right orientation
+            region_sample[0], region_sample[open_wall_dir_ind] = region_sample[open_wall_dir_ind], region_sample[0]
+
+            # transform to local center coordinates of cuboid
+            translation = np.ones(self.dim) * 0.25
+            translation[open_wall_dir_ind] = -0.25 if open_wall_dir_sign > 0 else self.thickness + 0.25
+            region_sample += translation
+
+        # translate to global coordinates and then return
+        return region_sample + 0.25 * np.ones(self.dim) + 0.5 * np.array(sampled_cuboid_coords)
 
     @staticmethod
     def _unblock_wall(cube_coords, neighbor_coords, walls_low, walls_high):
