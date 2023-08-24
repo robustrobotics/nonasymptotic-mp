@@ -144,8 +144,12 @@ class GrayCodeWalls:
         # and then transform back
         unit_cube_sample = self.rng.uniform(size=(self.dim,))
 
-        if sampled_region == EndCuboidRegions.CENTER or sampled_region == MidCuboidRegions.CENTER:
-            region_sample = unit_cube_sample * self.cube_center_lengths
+        return self._transform_sample_to_global_frame(unit_cube_sample, sampled_cuboid_coords, sampled_region)
+
+    def _transform_sample_to_global_frame(self, unit_sample, cuboid_coords, region):
+
+        if region == EndCuboidRegions.CENTER or region == MidCuboidRegions.CENTER:
+            region_sample = unit_sample * self.cube_center_lengths
 
             # since the center case is all the same, we can transform back immediately.
             # translate coords to the center of the cube
@@ -154,14 +158,14 @@ class GrayCodeWalls:
             # then translate to the global coord frame using the selected cuboid
 
         else:
-            region_sample = unit_cube_sample * self.open_wall_lengths  # the short side is in the 0th dimension
+            region_sample = unit_sample * self.open_wall_lengths  # the short side is in the 0th dimension
 
             # exchange axes to reflect to the correct orientation
-            ix = 0 if sampled_region == EndCuboidRegions.PASSAGE or sampled_region == MidCuboidRegions.PASSAGE1 else 1
-            adjoined_cuboid_coords = self.no_walls_graph.neighbors(sampled_cuboid_coords)[ix]
+            ix = 0 if region == EndCuboidRegions.PASSAGE or region == MidCuboidRegions.PASSAGE1 else 1
+            adjoined_cuboid_coords = self.no_walls_graph.neighbors(cuboid_coords)[ix]
 
             # find direction (e.g. dimension) cuboid of open wall (sign says if positive or negative direction)
-            open_wall_dir = np.array(adjoined_cuboid_coords) - np.array(sampled_cuboid_coords)
+            open_wall_dir = np.array(adjoined_cuboid_coords) - np.array(cuboid_coords)
             open_wall_dir_ind = np.where(open_wall_dir)
             open_wall_dir_sign = open_wall_dir[open_wall_dir_ind]
 
@@ -174,7 +178,7 @@ class GrayCodeWalls:
             region_sample += translation
 
         # translate to global coordinates and then return
-        return region_sample + 0.25 * np.ones(self.dim) + 0.5 * np.array(sampled_cuboid_coords)
+        return region_sample + 0.25 * np.ones(self.dim) + 0.5 * np.array(cuboid_coords)
 
     @staticmethod
     def _unblock_wall(cube_coords, neighbor_coords, walls_low, walls_high):
