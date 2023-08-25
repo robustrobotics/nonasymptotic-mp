@@ -1,4 +1,4 @@
-from nonasymptotic.envs import GrayCodeWalls
+from nonasymptotic.envs import GrayCodeWalls, MidCuboidRegions, EndCuboidRegions
 
 from sympy.combinatorics.graycode import GrayCode
 import networkx as nx
@@ -87,9 +87,66 @@ class Test3dGrayCodeEnv:
              ))
 
     def test_end_block_sampling_transform(self):
-        cube_coords = (3, 1, 0)
-        # if self.env._transform_sample_to_global_frame(np.zeros(3), cube_coords, np.zeros(3)) != approx()
-        pass
+        # testing end block (3, 0, 0) <- (3, 0, 1)
+        cube_coords = (3, 0, 0)
+        neighbor_coords = (3, 0, 1)
+        errors = []
+
+        sample_corner = np.zeros(3)
+        transformed_corner_in_center = self.env._transform_sample_to_global_frame(
+            sample_corner, cube_coords, EndCuboidRegions.CENTER
+        )
+
+        if transformed_corner_in_center != approx(np.array(cube_coords, dtype='float')):
+            errors.append('incorrect transform for center: is %s, should be %s'
+                          % (str(transformed_corner_in_center), str(np.array(cube_coords)))
+                          )
+
+        transformed_corner_in_passage = self.env._transform_sample_to_global_frame(
+            sample_corner, cube_coords, EndCuboidRegions.PASSAGE
+        )
+
+        if transformed_corner_in_passage != approx(np.array(neighbor_coords, dtype='float')):
+            errors.append('incorrect transform for end passage: is %s, should be %s'
+                          % (str(transformed_corner_in_center), str(np.array(neighbor_coords)))
+                          )
 
     def test_mid_block_sampling_transform(self):
-        pass
+        # looking at connection (2, 0, 1) -> (2, 1, 1) -> (2, 1, 0)
+        errors = []
+
+        pred_coords = (2, 0, 1)
+        cube_coords = (2, 1, 1)
+        succ_coords = (2, 1, 0)
+
+        sample_corner = np.zeros(3)
+
+        transformed_corner_in_prev_passage = self.env._transform_sample_to_global_frame(
+            sample_corner, cube_coords, MidCuboidRegions.PASSAGE1
+        )
+
+        if transformed_corner_in_prev_passage != approx(np.array(cube_coords, dtype='float')):
+            errors.append(
+                'incorrect transform for successor passage: is %s, should be %s'
+                % (str(transformed_corner_in_prev_passage), str(np.array(cube_coords)))
+            )
+
+        transformed_corner_in_center = self.env._transform_sample_to_global_frame(
+            sample_corner, cube_coords, MidCuboidRegions.CENTER
+        )
+
+        if transformed_corner_in_center != approx(np.array(cube_coords, dtype='float')):
+            errors.append(
+                'incorrect transform for center: is %s, should be %s'
+                % (str(transformed_corner_in_center), str(np.array(cube_coords)))
+            )
+
+        transformed_corner_in_succ_passage = self.env._transform_sample_to_global_frame(
+            sample_corner, cube_coords, MidCuboidRegions.PASSAGE2
+        )
+
+        if transformed_corner_in_succ_passage != approx(np.array(succ_coords, dtype='float')):
+            errors.append(
+                'incorrect transform for center: is %s, should be %s'
+                % (str(transformed_corner_in_center), str(np.array(succ_coords)))
+            )
