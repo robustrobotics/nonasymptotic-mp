@@ -47,7 +47,7 @@ class GrayCodeWalls:
 
         # initialize all the random number generators that we'll need for sampling
         # we pre-process all probability values to speed up computation later
-        self.cube_center_lengths = np.ones(dim) * (0.5 - 2 * thickness)
+        self.cube_center_lengths = np.ones(dim) * (1.0 - 2 * thickness)
 
         self.open_wall_lengths = copy.deepcopy(self.cube_center_lengths)
         self.open_wall_lengths[0] = thickness
@@ -97,19 +97,17 @@ class GrayCodeWalls:
         assert x.shape == (self.dim,)
 
         # begin by rounding to know which hypercube we are in
-        cube_coords = np.round(x).astype('int64')
+        cube_coords = np.floor(x).astype('int64')
 
         # translate to cube center
-        leveler = np.zeros(self.dim)
-        leveler[0] += int(x[0])
-        x_c = (x - leveler) - ((cube_coords - leveler) / 2 + 0.25)
+        x_c = x - (cube_coords + 0.5)
 
         # get neighbors so we know there are free passageways
         neighbors = list(self.no_walls_graph.neighbors(tuple(cube_coords)))
 
         # fill in coordinates of walls, accounting for neighbors with no walls
-        walls_low = np.ones(self.dim) * -0.25
-        walls_high = np.ones(self.dim) * 0.25
+        walls_low = np.ones(self.dim) * -0.5
+        walls_high = np.ones(self.dim) * 0.5
 
         for i in range(len(neighbors)):
             walls_low, walls_high = self._unblock_wall(
@@ -153,7 +151,7 @@ class GrayCodeWalls:
 
             # since the center case is all the same, we can transform back immediately.
             # translate coords to the center of the cube
-            region_sample -= np.ones(self.dim) * 0.25
+            region_sample -= self.cube_center_lengths / 2
 
             # then translate to the global coord frame using the selected cuboid
 
@@ -173,12 +171,12 @@ class GrayCodeWalls:
             region_sample[0], region_sample[open_wall_dir_ind] = region_sample[open_wall_dir_ind], region_sample[0]
 
             # transform to local center coordinates of cuboid
-            translation = np.ones(self.dim) * 0.25
-            translation[open_wall_dir_ind] = -0.25 if open_wall_dir_sign > 0 else self.thickness + 0.25
+            translation = np.ones(self.dim) * 0.5
+            translation[open_wall_dir_ind] = -0.5 if open_wall_dir_sign > 0 else self.thickness + 0.5
             region_sample += translation
 
         # translate to global coordinates and then return
-        return region_sample + 0.25 * np.ones(self.dim) + 0.5 * np.array(cuboid_coords)
+        return region_sample + np.array(cuboid_coords) + 0.5
 
     @staticmethod
     def _unblock_wall(cube_coords, neighbor_coords, walls_low, walls_high):
