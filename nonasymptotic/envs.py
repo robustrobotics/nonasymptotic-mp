@@ -160,7 +160,7 @@ class GrayCodeWalls:
 
             # exchange axes to reflect to the correct orientation
             ix = 0 if region == EndCuboidRegions.PASSAGE or region == MidCuboidRegions.PASSAGE1 else 1
-            adjoined_cuboid_coords = self.no_walls_graph.neighbors(cuboid_coords)[ix]
+            adjoined_cuboid_coords = list(self.no_walls_graph.neighbors(cuboid_coords))[ix]
 
             # find direction (e.g. dimension) cuboid of open wall (sign says if positive or negative direction)
             open_wall_dir = np.array(adjoined_cuboid_coords) - np.array(cuboid_coords)
