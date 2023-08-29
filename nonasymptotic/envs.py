@@ -171,8 +171,8 @@ class GrayCodeWalls:
             region_sample[0], region_sample[open_wall_dir_ind] = region_sample[open_wall_dir_ind], region_sample[0]
 
             # transform to local center coordinates of cuboid
-            translation = np.ones(self.dim) * 0.5
-            translation[open_wall_dir_ind] = -0.5 if open_wall_dir_sign > 0 else self.thickness + 0.5
+            translation = np.ones(self.dim) * -0.5 + self.thickness
+            translation[open_wall_dir_ind] = 0.5 - self.thickness if open_wall_dir_sign > 0 else -0.5
             region_sample += translation
 
         # translate to global coordinates and then return

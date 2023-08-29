@@ -7,7 +7,7 @@ import numpy as np
 from pytest import approx
 
 
-class Test3dGrayCodeEnv:
+class Test3dGrayCodeEnvNoThickness:
     env = GrayCodeWalls(3, 4, 0)
     gray_coords = [
         tuple(
@@ -86,7 +86,7 @@ class Test3dGrayCodeEnv:
                  list(self.env.no_walls_graph.neighbors((0, 1, 0)))
              ))
 
-    def test_end_block_sampling_transform(self):
+    def test_end_block_sampling_transform_no_thickness(self):
         # testing end block (3, 0, 0) <- (3, 0, 1)
         cube_coords = (3, 0, 0)
         neighbor_coords = (3, 0, 1)
@@ -108,10 +108,12 @@ class Test3dGrayCodeEnv:
 
         if transformed_corner_in_passage != approx(np.array(neighbor_coords, dtype='float')):
             errors.append('incorrect transform for end passage: is %s, should be %s'
-                          % (str(transformed_corner_in_center), str(np.array(neighbor_coords)))
+                          % (str(transformed_corner_in_passage), str(np.array(neighbor_coords)))
                           )
 
-    def test_mid_block_sampling_transform(self):
+        assert not errors
+
+    def test_mid_block_sampling_transform_no_thickness(self):
         # looking at connection (2, 0, 1) -> (2, 1, 1) -> (2, 1, 0)
         errors = []
 
@@ -127,7 +129,7 @@ class Test3dGrayCodeEnv:
 
         if transformed_corner_in_prev_passage != approx(np.array(cube_coords, dtype='float')):
             errors.append(
-                'incorrect transform for successor passage: is %s, should be %s'
+                'incorrect transform for predecessor passage: is %s, should be %s'
                 % (str(transformed_corner_in_prev_passage), str(np.array(cube_coords)))
             )
 
@@ -145,8 +147,133 @@ class Test3dGrayCodeEnv:
             sample_corner, cube_coords, MidCuboidRegions.PASSAGE2
         )
 
-        if transformed_corner_in_succ_passage != approx(np.array(succ_coords, dtype='float')):
+        if transformed_corner_in_succ_passage != approx(np.array(cube_coords, dtype='float')):
             errors.append(
-                'incorrect transform for center: is %s, should be %s'
-                % (str(transformed_corner_in_center), str(np.array(succ_coords)))
+                'incorrect transform for successor passage: is %s, should be %s'
+                % (str(transformed_corner_in_succ_passage), str(np.array(cube_coords)))
             )
+
+        assert not errors
+
+
+class Test3dGrayCodeEnvWithThickness:
+    env = GrayCodeWalls(3, 4, 0.1)
+
+    def test_end_block_sampling_transform(self):
+        # testing end block (0, 0, 0) -> (0, 0, 1)
+        cube_coords = (0, 0, 0)
+        neighbor_coords = (0, 0, 1)
+        errors = []
+
+        sample_corner = np.zeros(3)
+        sample_center = np.ones(3) * 0.5
+
+        transformed_corner_in_center = self.env._transform_sample_to_global_frame(
+            sample_corner, cube_coords, EndCuboidRegions.CENTER
+        )
+
+        if transformed_corner_in_center != approx(np.ones(3) * 0.1):
+            errors.append('incorrect transform for corner of center: is %s, should be %s'
+                          % (str(transformed_corner_in_center), str(np.array(cube_coords)))
+                          )
+
+        transformed_corner_in_passage = self.env._transform_sample_to_global_frame(
+            sample_corner, cube_coords, EndCuboidRegions.PASSAGE
+        )
+
+        if transformed_corner_in_passage != approx(np.array([0.1, 0.1, 0.9])):
+            errors.append('incorrect transform for corner of end passage: is %s, should be %s'
+                          % (str(transformed_corner_in_passage), str(np.array(np.array([0.1, 0.1, 0.9]))))
+                          )
+
+        transformed_center_in_center = self.env._transform_sample_to_global_frame(
+            sample_center, cube_coords, EndCuboidRegions.CENTER
+        )
+
+        if transformed_center_in_center != approx(np.ones(3) * 0.5):
+            errors.append('incorrect transform for center of center: is %s, should be %s'
+                          % (str(transformed_center_in_center), str(np.ones(3) * 0.5))
+                          )
+
+        transformed_center_in_passage = self.env._transform_sample_to_global_frame(
+            sample_center, cube_coords, EndCuboidRegions.PASSAGE
+        )
+
+        if transformed_center_in_passage != approx(np.array([0.5, 0.5, 0.95])):
+            errors.append('incorrect transform for center of end passage: is %s, should be %s'
+                          % (str(transformed_center_in_passage), str(np.array([0.5, 0.5, 0.95])))
+                          )
+
+        assert not errors
+
+    def test_mid_block_sampling_transform(self):
+        # looking at connection (2, 0, 0) -> (2, 0, 1) -> (2, 1, 1)
+        #                       ^ pred ^                   ^ succ ^
+        errors = []
+
+        cube_coords = (2, 0, 1)
+
+        sample_corner = np.zeros(3)
+        sample_center = np.ones(3) * 0.5
+
+        transformed_corner_in_prev_passage = self.env._transform_sample_to_global_frame(
+            sample_corner, cube_coords, MidCuboidRegions.PASSAGE1
+        )
+
+        if transformed_corner_in_prev_passage != approx(np.array([0.1, 0.1, 0.0]) + np.array(cube_coords)):
+            errors.append(
+                'incorrect transform for corner of predecessor passage: is %s, should be %s'
+                % (str(transformed_corner_in_prev_passage), str(np.array([0.1, 0.1, 0.0]) + np.array(cube_coords)))
+            )
+
+        transformed_corner_in_center = self.env._transform_sample_to_global_frame(
+            sample_corner, cube_coords, MidCuboidRegions.CENTER
+        )
+
+        if transformed_corner_in_center != approx(np.ones(3) * 0.1 + np.array(cube_coords)):
+            errors.append(
+                'incorrect transform for corner of center: is %s, should be %s'
+                % (str(transformed_corner_in_center), str(np.ones(3) + np.array(cube_coords)))
+            )
+
+        transformed_corner_in_succ_passage = self.env._transform_sample_to_global_frame(
+            sample_corner, cube_coords, MidCuboidRegions.PASSAGE2
+        )
+
+        if transformed_corner_in_succ_passage != approx(np.array([0.1, 0.9, 0.1]) + np.array(cube_coords)):
+            errors.append(
+                'incorrect transform for corner of successor passage: is %s, should be %s'
+                % (str(transformed_corner_in_succ_passage), str(np.array([0.1, 0.9, 0.1]) + np.array(cube_coords)))
+            )
+
+        transformed_center_in_prev_passage = self.env._transform_sample_to_global_frame(
+            sample_center, cube_coords, MidCuboidRegions.PASSAGE1
+        )
+
+        if transformed_center_in_prev_passage != approx(np.array([0.5, 0.5, 0.05]) + np.array(cube_coords)):
+            errors.append(
+                'incorrect transform for center of previous passage: is %s, should be %s'
+                % (str(transformed_center_in_prev_passage), str(np.array([0.5, 0.5, 0.05]) + np.array(cube_coords)))
+            )
+
+        transformed_center_in_center = self.env._transform_sample_to_global_frame(
+            sample_center, cube_coords, MidCuboidRegions.CENTER
+        )
+
+        if transformed_center_in_center != approx(np.array(cube_coords) + np.ones(3) * 0.5):
+            errors.append(
+                'incorrect transform for center of center: is %s, should be %s'
+                % (str(transformed_center_in_center), str(np.array(cube_coords)) + np.ones(3) * 0.5)
+            )
+
+        transformed_center_in_succ_passage = self.env._transform_sample_to_global_frame(
+            sample_center, cube_coords, MidCuboidRegions.PASSAGE2
+        )
+
+        if transformed_center_in_succ_passage != approx(np.array([0.5, 0.95, 0.5]) + np.array(cube_coords)):
+            errors.append(
+                'incorrect trasnform for center of succeeding passage: is %s, should be %s'
+                % (str(transformed_center_in_succ_passage), str(np.array([0.5, 0.95, 0.5]) + np.array(cube_coords)))
+            )
+
+        assert not errors
