@@ -277,3 +277,16 @@ class Test3dGrayCodeEnvWithThickness:
             )
 
         assert not errors
+
+    def test_samples_are_all_within_walls(self):
+        points = []
+        for i in range(100000):
+            points.append(self.env.sample_from_env())
+
+        errors = []
+        for p in points:
+            d = self.env.distance_to_wall(p)
+            if d <= 0.0:
+                errors.append('%s was sampled and distance_to_wall evaluated %f' % (str(p), d))
+
+        assert not errors

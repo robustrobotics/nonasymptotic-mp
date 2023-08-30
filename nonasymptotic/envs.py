@@ -120,23 +120,20 @@ class GrayCodeWalls:
 
     def sample_from_env(self):
         # first, sample which cuboid we will land
-        sampled_cuboid_coords = self.rng.choice(
-            self.no_walls_linear_list,
-            p=self.cuboid_pmf_vect
-        )
+        sampled_cuboid_coords_ix = self.rng.choice(len(self.no_walls_linear_list), p=self.cuboid_pmf_vect)
+        sampled_cuboid_coords = self.no_walls_linear_list[sampled_cuboid_coords_ix]
 
         # next, sample if we are in the center or (one of/only) open wall in selected cuboid
-        if (sampled_cuboid_coords == self.no_walls_linear_list[0]
-                or sampled_cuboid_coords == self.no_walls_linear_list[-1]):
-            sampled_region = self.rng.choice(
-                [EndCuboidRegions.CENTER, EndCuboidRegions.PASSAGE],
-                p=self.end_passage_regions_pmf_vect
-            )
+        if ((sampled_cuboid_coords == self.no_walls_linear_list[0])
+                or (sampled_cuboid_coords == self.no_walls_linear_list[-1])):
+            sampled_region_ix = self.rng.choice(a=2, p=self.end_passage_regions_pmf_vect)
+            sampled_region = [EndCuboidRegions.CENTER, EndCuboidRegions.PASSAGE][sampled_region_ix]
+
         else:
-            sampled_region = self.rng.choice(
-                [MidCuboidRegions.PASSAGE1, MidCuboidRegions.CENTER, MidCuboidRegions.PASSAGE2],
-                p=self.mid_passage_regions_pmf_vect
-            )
+            sampled_region_ix = self.rng.choice(a=3, p=self.mid_passage_regions_pmf_vect)
+            sampled_region = [MidCuboidRegions.PASSAGE1,
+                              MidCuboidRegions.CENTER,
+                              MidCuboidRegions.PASSAGE2][sampled_region_ix]
 
         # sample point from the defined region (sample from a box then do coord scale)
         # and then transform back
