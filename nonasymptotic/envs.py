@@ -40,7 +40,7 @@ class GrayCodeWalls:
 
         no_walls_edge_list = list(zip(self.no_walls_linear_list, self.no_walls_linear_list[1:]))
 
-        self.no_walls_graph = nx.Graph()
+        self.no_walls_graph = nx.DiGraph()
         self.no_walls_graph.add_nodes_from(self.no_walls_linear_list)
         self.no_walls_graph.add_edges_from(
             no_walls_edge_list)  # we could store the complement, (edge = wall) but that's larger memory
@@ -103,7 +103,8 @@ class GrayCodeWalls:
         x_c = x - (cube_coords + 0.5)
 
         # get neighbors so we know there are free passageways
-        neighbors = list(self.no_walls_graph.neighbors(tuple(cube_coords)))
+        neighbors = (list(self.no_walls_graph.predecessors(tuple(cube_coords)))
+                     + list(self.no_walls_graph.successors(tuple(cube_coords))))
 
         # fill in coordinates of walls, accounting for neighbors with no walls
         walls_low = np.ones(self.dim) * -0.5
@@ -141,6 +142,21 @@ class GrayCodeWalls:
 
         return self._transform_sample_to_global_frame(unit_cube_sample, sampled_cuboid_coords, sampled_region)
 
+    def start_point(self):
+        # the start point is always the same: [0.5]*d
+        return np.array([0.5] * self.dim)
+
+    def end_point(self):
+        return np.array(self.no_walls_linear_list[-1]) + 0.5 * np.ones(self.dim)
+
+    def march_along_curve(self, basepoint, rad):
+        # NOTE: we are only shooting along the to the next box (so radius is assumed to be less than 1),
+        # since we're gauranteed to have full visibility there.
+
+        # proceed in a backward search manner. Try to find a solution for the last leg, then the second-to-last
+        # until we find one. If we don't, then throw an error, since something must have gone wrong.
+        pass
+
     def _transform_sample_to_global_frame(self, unit_sample, cuboid_coords, region):
 
         if region == EndCuboidRegions.CENTER or region == MidCuboidRegions.CENTER:
@@ -157,7 +173,9 @@ class GrayCodeWalls:
 
             # exchange axes to reflect to the correct orientation
             ix = 0 if region == EndCuboidRegions.PASSAGE or region == MidCuboidRegions.PASSAGE1 else 1
-            adjoined_cuboid_coords = list(self.no_walls_graph.neighbors(cuboid_coords))[ix]
+            neighbors = (list(self.no_walls_graph.predecessors(cuboid_coords)) +
+                         list(self.no_walls_graph.successors(cuboid_coords)))
+            adjoined_cuboid_coords = neighbors[ix]
 
             # find direction (e.g. dimension) cuboid of open wall (sign says if positive or negative direction)
             open_wall_dir = np.array(adjoined_cuboid_coords) - np.array(cuboid_coords)
@@ -198,3 +216,7 @@ class GrayCodeWalls:
                 list_of_coords
             )
         )
+
+
+if __name__ == '__main__':
+    walls = GrayCodeWalls(3, 2, 0.125)
