@@ -149,13 +149,67 @@ class GrayCodeWalls:
     def end_point(self):
         return np.array(self.no_walls_linear_list[-1]) + 0.5 * np.ones(self.dim)
 
-    def march_along_curve(self, basepoint, rad):
+    def arc_length_to_curve_point(self, t):
+        # set to scale from [0, 1] to the true geometric length of the curve
+        t *= 0.5 + 0.5 * (len(self.no_walls_linear_list) - 2) + 0.5
+
+        # compute number of half-edges traversed (including the current one)
+        n_straights = np.ceil(t / 0.5)
+
+        # then, find the cube, check to see how much progress t has made in the cube, and then work out the coordinate
+        # from there.
+        if n_straights == 1:
+            t_point = np.ones(self.dim) * 0.5
+            t_point[-1] += t
+        elif n_straights == 1 + 2 * (len(self.no_walls_linear_list) - 2) + 1:
+            cube_coords = np.array(self.no_walls_linear_list[-1])
+            t_backup = 0.5 - (t - (n_straights - 1) * 0.5)
+            t_point = cube_coords + np.ones(self.dim) * 0.5
+            t_point[-1] += t_backup
+
+        else:
+            cube = self.no_walls_linear_list[int((n_straights - 1) / 2)]
+            t_point = np.array(cube) + np.ones(self.dim) * 0.5
+            if n_straights % 2 == 0:  # if we are on the first (entrance) leg of the cube
+                t_backup = 0.5 - (t - (n_straights - 1) * 0.5)
+                pred_cube = self.no_walls_graph.predecessors(cube).__next__()
+                dir_to_entrance = np.array(pred_cube) - np.array(cube)
+                t_point += t_backup * dir_to_entrance
+
+            else:  # if we are on the second (exit) leg of the cube
+                t_forward = t - (n_straights - 1) * 0.5
+                succ_cube = self.no_walls_graph.successors(cube)
+                dir_to_exit = np.array(succ_cube) - np.array(cube)
+                t_point += t_forward * dir_to_exit
+
+        return t_point
+
+    def march_along_curve_from_point(self, basepoint, rad):
         # NOTE: we are only shooting along the to the next box (so radius is assumed to be less than 1),
-        # since we're gauranteed to have full visibility there.
+        # since we're guaranteed to have full visibility there.
 
         # proceed in a backward search manner. Try to find a solution for the last leg, then the second-to-last
         # until we find one. If we don't, then throw an error, since something must have gone wrong.
-        pass
+        cube_coords = np.floor(basepoint).astype('int64')
+        prev_cube = np.array(self.no_walls_graph.successors(cube_coords).__next__())
+        prev_to_cur = cube_coords - prev_cube
+
+        try:
+            next_cube = np.array(self.no_walls_graph.successors(cube_coords).__next__())
+            cur_to_next = next_cube - cube_coords
+        except StopIteration:
+            # then we're at an end block
+            return
+
+        try:
+            next_next_cube = np.array(self.no_walls_graph.successors(next_cube).__next__())
+            next_to_next_next = next_next_cube - next_cube
+        except StopIteration:
+            return
+
+        # then we're not at an end block, proceed as normal.
+
+        return
 
     def _transform_sample_to_global_frame(self, unit_sample, cuboid_coords, region):
 
@@ -219,4 +273,8 @@ class GrayCodeWalls:
 
 
 if __name__ == '__main__':
-    walls = GrayCodeWalls(3, 2, 0.125)
+    walls = GrayCodeWalls(4, 3, 0.125)
+    print(walls.no_walls_linear_list)
+
+    walls = GrayCodeWalls(4, 4, 0.125)
+    print(walls.no_walls_linear_list)
