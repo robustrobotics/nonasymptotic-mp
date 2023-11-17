@@ -149,7 +149,7 @@ class GrayCodeWalls:
     def end_point(self):
         return np.array(self.no_walls_linear_list[-1]) + 0.5 * np.ones(self.dim)
 
-    def arc_length_to_curve_point(self, t):
+    def arclength_to_curve_point(self, t):
         # set to scale from [0, 1] to the true geometric length of the curve
         t *= 0.5 + 0.5 * (len(self.no_walls_linear_list) - 2) + 0.5
 
@@ -183,33 +183,6 @@ class GrayCodeWalls:
                 t_point += t_forward * dir_to_exit
 
         return t_point
-
-    def march_along_curve_from_point(self, basepoint, rad):
-        # NOTE: we are only shooting along the to the next box (so radius is assumed to be less than 1),
-        # since we're guaranteed to have full visibility there.
-
-        # proceed in a backward search manner. Try to find a solution for the last leg, then the second-to-last
-        # until we find one. If we don't, then throw an error, since something must have gone wrong.
-        cube_coords = np.floor(basepoint).astype('int64')
-        prev_cube = np.array(self.no_walls_graph.successors(cube_coords).__next__())
-        prev_to_cur = cube_coords - prev_cube
-
-        try:
-            next_cube = np.array(self.no_walls_graph.successors(cube_coords).__next__())
-            cur_to_next = next_cube - cube_coords
-        except StopIteration:
-            # then we're at an end block
-            return
-
-        try:
-            next_next_cube = np.array(self.no_walls_graph.successors(next_cube).__next__())
-            next_to_next_next = next_next_cube - next_cube
-        except StopIteration:
-            return
-
-        # then we're not at an end block, proceed as normal.
-
-        return
 
     def _transform_sample_to_global_frame(self, unit_sample, cuboid_coords, region):
 
