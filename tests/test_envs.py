@@ -294,10 +294,10 @@ class Test3dGrayCodeEnvWithThickness:
 
 class TestGrayCodeEnvCurveRep:
     env_odd = GrayCodeWalls(3, 3, 0.1)
-    curve_len_odd = 0.5 + 10*2 * 0.5 + 0.5
+    curve_len_odd = 0.5 + 10 * 2 * 0.5 + 0.5
 
     env_even = GrayCodeWalls(3, 2, 0.1)
-    curve_len_even = 0.5 + 6*2 * 0.5 + 0.5
+    curve_len_even = 0.5 + 6 * 2 * 0.5 + 0.5
 
     def test_first_cube(self):
         n_points = 10
@@ -356,8 +356,40 @@ class TestGrayCodeEnvCurveRep:
                               (str(point), str(mapped_point)))
 
     def test_mid_cube_entry_leg(self):
-        center_t = 0
-        pass
+        errors = []
+        n_points = 10
+        t_neg0_to_neg05 = np.linspace(0, 0.5, n_points)
+        arclen_t_neg0_to_neg05 = t_neg0_to_neg05 * self.curve_len_odd
+        # we'll be testing block 2 and block 4 (0-relative indexing)
+        # block 2: predecessor...(0, 0, 1) -> (0, 1, 1)...base
+        base = np.array([0, 1, 1]) + np.ones(3) * 0.5
+        points_on_curve = base + np.hstack([
+            np.zeros((n_points, 1)),
+            -arclen_t_neg0_to_neg05.reshape(-1, 1),
+            np.zeros((n_points, 1))
+        ])
+
+        for t_neg, point in zip(t_neg0_to_neg05, points_on_curve):
+            mapped_point = self.env_odd.arclength_to_curve_point((1.0 / 8) * 4 + t_neg)
+            if mapped_point != approx(point):
+                errors.append('Incorrect point mapping in block 2: expected %s, received %s' %
+                              (str(point), str(mapped_point)))
+
+        # block 4: predecessor...(0, 1, 0) -> (1, 1, 0)...base
+        base = np.array([1, 1, 0]) + np.ones(3) * 0.5
+        points_on_curve = base + np.hstack([
+            -arclen_t_neg0_to_neg05.reshape(-1, 1),
+            np.zeros((n_points, 1)),
+            np.zeros((n_points, 1))
+        ])
+
+        for t_neg, point in zip(t_neg0_to_neg05, points_on_curve):
+            mapped_point = self.env_odd.arclength_to_curve_point((1.0 / 8) * 8 + t_neg)
+            if mapped_point != approx(point):
+                errors.append('Incorrect point mapping in block 4: expected %s, received %s' %
+                              (str(point), str(mapped_point)))
+
+        assert not errors
 
     def test_mid_cube_exit_leg(self):
         pass
