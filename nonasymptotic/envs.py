@@ -151,7 +151,7 @@ class GrayCodeWalls:
 
     def arclength_to_curve_point(self, t):
         # set to scale from [0, 1] to the true geometric length of the curve
-        t *= 0.5 + 0.5 * (len(self.no_walls_linear_list) - 2) + 0.5
+        t *= 0.5 + 0.5 * 2 * (len(self.no_walls_linear_list) - 2) + 0.5
 
         # compute number of half-edges traversed (including the current one)
         n_straights = np.ceil(t / 0.5)
@@ -246,8 +246,8 @@ class GrayCodeWalls:
 
 
 if __name__ == '__main__':
-    walls = GrayCodeWalls(3, 3, 0.125)
+    walls = GrayCodeWalls(3, 3, 0.1)
     print(walls.no_walls_linear_list)
 
-    walls = GrayCodeWalls(3, 4, 0.125)
+    walls = GrayCodeWalls(3, 2, 0.1)
     print(walls.no_walls_linear_list)

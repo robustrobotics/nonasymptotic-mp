@@ -293,11 +293,11 @@ class Test3dGrayCodeEnvWithThickness:
 
 
 class TestGrayCodeEnvCurveRep:
-    env_odd = GrayCodeWalls(3, 1, 0.1)
-    curve_len_odd = 0.5 + 6 * 0.5 + 0.5
+    env_odd = GrayCodeWalls(3, 3, 0.1)
+    curve_len_odd = 0.5 + 10*2 * 0.5 + 0.5
 
     env_even = GrayCodeWalls(3, 2, 0.1)
-    curve_len_even = 0.5 + 14 * 0.5 + 0.5
+    curve_len_even = 0.5 + 6*2 * 0.5 + 0.5
 
     def test_first_cube(self):
         n_points = 10
@@ -356,6 +356,7 @@ class TestGrayCodeEnvCurveRep:
                               (str(point), str(mapped_point)))
 
     def test_mid_cube_entry_leg(self):
+        center_t = 0
         pass
 
     def test_mid_cube_exit_leg(self):
@@ -364,5 +365,5 @@ class TestGrayCodeEnvCurveRep:
     def test_mid_cube_leg_transition(self):
         pass
 
-    def test_cube_tranisition(self):
+    def test_cube_transition(self):
         pass
