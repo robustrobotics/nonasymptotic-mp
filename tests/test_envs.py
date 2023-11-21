@@ -290,3 +290,79 @@ class Test3dGrayCodeEnvWithThickness:
                 errors.append('%s was sampled and distance_to_wall evaluated %f' % (str(p), d))
 
         assert not errors
+
+
+class TestGrayCodeEnvCurveRep:
+    env_odd = GrayCodeWalls(3, 1, 0.1)
+    curve_len_odd = 0.5 + 6 * 0.5 + 0.5
+
+    env_even = GrayCodeWalls(3, 2, 0.1)
+    curve_len_even = 0.5 + 14 * 0.5 + 0.5
+
+    def test_first_cube(self):
+        n_points = 10
+        t_0_to_05 = np.linspace(0, 0.5, n_points)
+        arclen_t_0_to_05 = t_0_to_05 * self.curve_len_odd
+        base = np.ones(3) * 0.5
+        points_on_curve = base + np.hstack([
+            np.zeros((n_points, 1)),
+            np.zeros((n_points, 1)),
+            arclen_t_0_to_05.reshape(-1, 1)
+        ])
+
+        errors = []
+        for t, point in zip(t_0_to_05, points_on_curve):
+            mapped_point = self.env_odd.arclength_to_curve_point(t)
+            if mapped_point != approx(point):
+                errors.append('Incorrect point mapping in first block: expected %s, received %s' %
+                              (str(point), str(mapped_point)))
+
+        assert not errors
+
+    def test_last_cube_odd_length(self):
+        n_points = 10
+        t_neg0_to_neg05 = np.linspace(0, 0.5, n_points)
+        arclen_t_neg0_to_neg05 = t_neg0_to_neg05 * self.curve_len_odd
+        base = np.array(self.env_odd.no_walls_linear_list[-1]) + np.ones(3) * 0.5
+        points_on_curve = base + np.hstack([
+            np.zeros((n_points, 1)),
+            np.zeros((n_points, 1)),
+            -arclen_t_neg0_to_neg05.reshape(-1, 1)
+        ])
+
+        errors = []
+        for neg_t, point in zip(t_neg0_to_neg05, points_on_curve):
+            mapped_point = self.env_odd.arclength_to_curve_point(1.0 - neg_t)
+            if mapped_point != approx(point):
+                errors.append('Incorrect point mapping in last block: expected %s, received %s' %
+                              (str(point), str(mapped_point)))
+
+    def test_last_cube_even_length(self):
+        n_points = 10
+        t_neg0_to_neg05 = np.linspace(0, 0.5, n_points)
+        arclen_t_neg0_to_neg05 = t_neg0_to_neg05 * self.curve_len_odd
+        base = np.array(self.env_even.no_walls_linear_list[-1]) + np.ones(3) * 0.5
+        points_on_curve = base + np.hstack([
+            np.zeros((n_points, 1)),
+            np.zeros((n_points, 1)),
+            -arclen_t_neg0_to_neg05.reshape(-1, 1)
+        ])
+
+        errors = []
+        for neg_t, point in zip(t_neg0_to_neg05, points_on_curve):
+            mapped_point = self.env_even.arclength_to_curve_point(1.0 - neg_t)
+            if mapped_point != approx(point):
+                errors.append('Incorrect point mapping in last block: expected %s, received %s' %
+                              (str(point), str(mapped_point)))
+
+    def test_mid_cube_entry_leg(self):
+        pass
+
+    def test_mid_cube_exit_leg(self):
+        pass
+
+    def test_mid_cube_leg_transition(self):
+        pass
+
+    def test_cube_tranisition(self):
+        pass

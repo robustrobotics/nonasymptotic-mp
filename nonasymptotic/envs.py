@@ -246,8 +246,8 @@ class GrayCodeWalls:
 
 
 if __name__ == '__main__':
-    walls = GrayCodeWalls(4, 3, 0.125)
+    walls = GrayCodeWalls(3, 3, 0.125)
     print(walls.no_walls_linear_list)
 
-    walls = GrayCodeWalls(4, 4, 0.125)
+    walls = GrayCodeWalls(3, 4, 0.125)
     print(walls.no_walls_linear_list)
