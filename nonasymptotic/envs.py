@@ -149,9 +149,9 @@ class GrayCodeWalls:
     def end_point(self):
         return np.array(self.no_walls_linear_list[-1]) + 0.5 * np.ones(self.dim)
 
-    def arclength_to_curve_point(self, t):
+    def arclength_to_curve_point(self, t_normed):
         # set to scale from [0, 1] to the true geometric length of the curve
-        t *= 0.5 * (1 + 2 * (len(self.no_walls_linear_list) - 2) + 1)
+        t = t_normed * 0.5 * (1 + 2 * (len(self.no_walls_linear_list) - 2) + 1)
 
         # compute number of half-edges traversed (including the current one)
         t_leg = 1 if t <= 0.0 else np.ceil(t / 0.5)
@@ -168,7 +168,7 @@ class GrayCodeWalls:
             t_point[-1] += t_backup
 
         else:
-            cube = self.no_walls_linear_list[int((t_leg - 1) / 2)]
+            cube = self.no_walls_linear_list[int(t_leg / 2)]
             t_point = np.array(cube) + np.ones(self.dim) * 0.5
             if t_leg % 2 == 0:  # if we are on the first (entrance) leg of the cube
                 t_backup = 0.5 - (t - (t_leg - 1) * 0.5)

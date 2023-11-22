@@ -369,8 +369,9 @@ class TestGrayCodeEnvCurveRep:
             np.zeros((self.n_test_points, 1))
         ])
 
+        t_center_block2 = (1.0 / self.n_legs_odd) * 4
         for t_neg, point in zip(t_neg0_to_neg05, points_on_curve):
-            mapped_point = self.env_odd.arclength_to_curve_point((1.0 / 8) * 4 - t_neg)
+            mapped_point = self.env_odd.arclength_to_curve_point(t_center_block2 - t_neg)
             if mapped_point != approx(point):
                 errors.append('Incorrect point mapping in entry leg of block 2: expected %s, received %s' %
                               (str(point), str(mapped_point)))
@@ -383,8 +384,9 @@ class TestGrayCodeEnvCurveRep:
             np.zeros((self.n_test_points, 1))
         ])
 
+        t_center_block4 = (1.0 / self.n_legs_odd) * 8
         for t_neg, point in zip(t_neg0_to_neg05, points_on_curve):
-            mapped_point = self.env_odd.arclength_to_curve_point((1.0 / 8) * 8 - t_neg)
+            mapped_point = self.env_odd.arclength_to_curve_point(t_center_block4 - t_neg)
             if mapped_point != approx(point):
                 errors.append('Incorrect point mapping in entry leg of block 4: expected %s, received %s' %
                               (str(point), str(mapped_point)))
@@ -405,7 +407,7 @@ class TestGrayCodeEnvCurveRep:
         ])
 
         for t_adv, point in zip(t_0_to_05, points_on_curve):
-            mapped_point = self.env_odd.arclength_to_curve_point((1.0 / 8) * 4 + t_adv)
+            mapped_point = self.env_odd.arclength_to_curve_point((1.0 / self.n_legs_odd) * 4 + t_adv)
             if mapped_point != approx(point):
                 errors.append('Incorrect point mapping in exit leg of block 2: expected %s, received %s' %
                               (str(point), str(mapped_point)))
@@ -419,7 +421,7 @@ class TestGrayCodeEnvCurveRep:
         ])
 
         for t_adv, point in zip(t_0_to_05, points_on_curve):
-            mapped_point = self.env_odd.arclength_to_curve_point((1.0 / 8) * 8 + t_adv)
+            mapped_point = self.env_odd.arclength_to_curve_point((1.0 / self.n_legs_odd) * 8 + t_adv)
             if mapped_point != approx(point):
                 errors.append('Incorrect point mapping in exit leg of block 4: expected %s, received %s' %
                               (str(point), str(mapped_point)))
