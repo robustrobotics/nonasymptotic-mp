@@ -370,9 +370,9 @@ class TestGrayCodeEnvCurveRep:
         ])
 
         for t_neg, point in zip(t_neg0_to_neg05, points_on_curve):
-            mapped_point = self.env_odd.arclength_to_curve_point((1.0 / 8) * 4 + t_neg)
+            mapped_point = self.env_odd.arclength_to_curve_point((1.0 / 8) * 4 - t_neg)
             if mapped_point != approx(point):
-                errors.append('Incorrect point mapping in block 2: expected %s, received %s' %
+                errors.append('Incorrect point mapping in entry leg of block 2: expected %s, received %s' %
                               (str(point), str(mapped_point)))
 
         # block 4: predecessor...(0, 1, 0) -> (1, 1, 0)...base
@@ -384,18 +384,57 @@ class TestGrayCodeEnvCurveRep:
         ])
 
         for t_neg, point in zip(t_neg0_to_neg05, points_on_curve):
-            mapped_point = self.env_odd.arclength_to_curve_point((1.0 / 8) * 8 + t_neg)
+            mapped_point = self.env_odd.arclength_to_curve_point((1.0 / 8) * 8 - t_neg)
             if mapped_point != approx(point):
-                errors.append('Incorrect point mapping in block 4: expected %s, received %s' %
+                errors.append('Incorrect point mapping in entry leg of block 4: expected %s, received %s' %
                               (str(point), str(mapped_point)))
 
         assert not errors
 
     def test_mid_cube_exit_leg(self):
-        pass
+        errors = []
+        n_points = 10
+        t_0_to_05 = np.linspace(0, 0.5, n_points)
+        arclen_t_0_to_05 = t_0_to_05 * self.curve_len_odd
+        # we'll be testing block 2 and block 4 (0-relative indexing)
+        # block 2: base...(0, 1, 1) -> (0, 1, 0)...successor
+        base = np.array([0, 1, 1]) + np.ones(3) * 0.5
+        points_on_curve = base + np.hstack([
+            np.zeros((n_points, 1)),
+            np.zeros((n_points, 1)),
+            -arclen_t_0_to_05.reshape(-1, 1),
+        ])
 
-    def test_mid_cube_leg_transition(self):
-        pass
+        for t_adv, point in zip(t_0_to_05, points_on_curve):
+            mapped_point = self.env_odd.arclength_to_curve_point((1.0 / 8) * 4 + t_adv)
+            if mapped_point != approx(point):
+                errors.append('Incorrect point mapping in exit leg of block 2: expected %s, received %s' %
+                              (str(point), str(mapped_point)))
+
+        # block 4: base...(1, 1, 0) -> (1, 1, 1)...successor
+        base = np.array([1, 1, 0]) + np.ones(3) * 0.5
+        points_on_curve = base + np.hstack([
+            np.zeros((n_points, 1)),
+            np.zeros((n_points, 1)),
+            arclen_t_0_to_05.reshape(-1, 1),
+        ])
+
+        for t_adv, point in zip(t_0_to_05, points_on_curve):
+            mapped_point = self.env_odd.arclength_to_curve_point((1.0 / 8) * 8 + t_adv)
+            if mapped_point != approx(point):
+                errors.append('Incorrect point mapping in exit leg of block 4: expected %s, received %s' %
+                              (str(point), str(mapped_point)))
+
+        assert not errors
 
     def test_cube_transition(self):
-        pass
+        ts = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5]
+        cube_centers = np.array(self.env_even.no_walls_linear_list) + np.ones(3) * 0.5
+        divider_locations = (cube_centers + cube_centers[1:])[:-1] / 2
+
+        errors = []
+        for ti, (ts, divider) in enumerate(zip(ts, divider_locations)):
+            mapped_point = self.env_even.arclength_to_curve_point(ti)
+            if mapped_point != approx(divider):
+                errors.append('Inccorect point mapping in divider between blocks %i and %i, expected %s, received %s.' %
+                              (ti, ti + 1, str(divider), str(mapped_point)))
