@@ -294,19 +294,22 @@ class Test3dGrayCodeEnvWithThickness:
 
 class TestGrayCodeEnvCurveRep:
     env_odd = GrayCodeWalls(3, 3, 0.1)
-    curve_len_odd = 0.5 + 10 * 2 * 0.5 + 0.5
+    n_legs_odd = 1 + 2 * 10 + 1
+    curve_len_odd = n_legs_odd * 0.5
 
     env_even = GrayCodeWalls(3, 2, 0.1)
-    curve_len_even = 0.5 + 6 * 2 * 0.5 + 0.5
+    n_legs_even = 1 + 2 * 6 + 1
+    curve_len_even = n_legs_even * 0.5
+    
+    n_test_points = 10
 
     def test_first_cube(self):
-        n_points = 10
-        t_0_to_05 = np.linspace(0, 0.5, n_points)
+        t_0_to_05 = np.linspace(0, 1.0 / self.n_legs_odd, self.n_test_points)
         arclen_t_0_to_05 = t_0_to_05 * self.curve_len_odd
         base = np.ones(3) * 0.5
         points_on_curve = base + np.hstack([
-            np.zeros((n_points, 1)),
-            np.zeros((n_points, 1)),
+            np.zeros((self.n_test_points, 1)),
+            np.zeros((self.n_test_points, 1)),
             arclen_t_0_to_05.reshape(-1, 1)
         ])
 
@@ -320,13 +323,12 @@ class TestGrayCodeEnvCurveRep:
         assert not errors
 
     def test_last_cube_odd_length(self):
-        n_points = 10
-        t_neg0_to_neg05 = np.linspace(0, 0.5, n_points)
+        t_neg0_to_neg05 = np.linspace(0, 1.0 / self.n_legs_odd, self.n_test_points)
         arclen_t_neg0_to_neg05 = t_neg0_to_neg05 * self.curve_len_odd
         base = np.array(self.env_odd.no_walls_linear_list[-1]) + np.ones(3) * 0.5
         points_on_curve = base + np.hstack([
-            np.zeros((n_points, 1)),
-            np.zeros((n_points, 1)),
+            np.zeros((self.n_test_points, 1)),
+            np.zeros((self.n_test_points, 1)),
             -arclen_t_neg0_to_neg05.reshape(-1, 1)
         ])
 
@@ -338,13 +340,12 @@ class TestGrayCodeEnvCurveRep:
                               (str(point), str(mapped_point)))
 
     def test_last_cube_even_length(self):
-        n_points = 10
-        t_neg0_to_neg05 = np.linspace(0, 0.5, n_points)
-        arclen_t_neg0_to_neg05 = t_neg0_to_neg05 * self.curve_len_odd
+        t_neg0_to_neg05 = np.linspace(0, 1.0 / self.n_legs_even, self.n_test_points)
+        arclen_t_neg0_to_neg05 = t_neg0_to_neg05 * self.curve_len_even
         base = np.array(self.env_even.no_walls_linear_list[-1]) + np.ones(3) * 0.5
         points_on_curve = base + np.hstack([
-            np.zeros((n_points, 1)),
-            np.zeros((n_points, 1)),
+            np.zeros((self.n_test_points, 1)),
+            np.zeros((self.n_test_points, 1)),
             -arclen_t_neg0_to_neg05.reshape(-1, 1)
         ])
 
@@ -357,16 +358,15 @@ class TestGrayCodeEnvCurveRep:
 
     def test_mid_cube_entry_leg(self):
         errors = []
-        n_points = 10
-        t_neg0_to_neg05 = np.linspace(0, 0.5, n_points)
+        t_neg0_to_neg05 = np.linspace(0, 1.0 / self.n_legs_odd, self.n_test_points)
         arclen_t_neg0_to_neg05 = t_neg0_to_neg05 * self.curve_len_odd
         # we'll be testing block 2 and block 4 (0-relative indexing)
         # block 2: predecessor...(0, 0, 1) -> (0, 1, 1)...base
         base = np.array([0, 1, 1]) + np.ones(3) * 0.5
         points_on_curve = base + np.hstack([
-            np.zeros((n_points, 1)),
+            np.zeros((self.n_test_points, 1)),
             -arclen_t_neg0_to_neg05.reshape(-1, 1),
-            np.zeros((n_points, 1))
+            np.zeros((self.n_test_points, 1))
         ])
 
         for t_neg, point in zip(t_neg0_to_neg05, points_on_curve):
@@ -379,8 +379,8 @@ class TestGrayCodeEnvCurveRep:
         base = np.array([1, 1, 0]) + np.ones(3) * 0.5
         points_on_curve = base + np.hstack([
             -arclen_t_neg0_to_neg05.reshape(-1, 1),
-            np.zeros((n_points, 1)),
-            np.zeros((n_points, 1))
+            np.zeros((self.n_test_points, 1)),
+            np.zeros((self.n_test_points, 1))
         ])
 
         for t_neg, point in zip(t_neg0_to_neg05, points_on_curve):
@@ -393,15 +393,14 @@ class TestGrayCodeEnvCurveRep:
 
     def test_mid_cube_exit_leg(self):
         errors = []
-        n_points = 10
-        t_0_to_05 = np.linspace(0, 0.5, n_points)
+        t_0_to_05 = np.linspace(0, 1.0 / self.n_legs_odd, self.n_test_points)
         arclen_t_0_to_05 = t_0_to_05 * self.curve_len_odd
         # we'll be testing block 2 and block 4 (0-relative indexing)
         # block 2: base...(0, 1, 1) -> (0, 1, 0)...successor
         base = np.array([0, 1, 1]) + np.ones(3) * 0.5
         points_on_curve = base + np.hstack([
-            np.zeros((n_points, 1)),
-            np.zeros((n_points, 1)),
+            np.zeros((self.n_test_points, 1)),
+            np.zeros((self.n_test_points, 1)),
             -arclen_t_0_to_05.reshape(-1, 1),
         ])
 
@@ -414,8 +413,8 @@ class TestGrayCodeEnvCurveRep:
         # block 4: base...(1, 1, 0) -> (1, 1, 1)...successor
         base = np.array([1, 1, 0]) + np.ones(3) * 0.5
         points_on_curve = base + np.hstack([
-            np.zeros((n_points, 1)),
-            np.zeros((n_points, 1)),
+            np.zeros((self.n_test_points, 1)),
+            np.zeros((self.n_test_points, 1)),
             arclen_t_0_to_05.reshape(-1, 1),
         ])
 
