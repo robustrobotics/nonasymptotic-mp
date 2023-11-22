@@ -151,34 +151,34 @@ class GrayCodeWalls:
 
     def arclength_to_curve_point(self, t):
         # set to scale from [0, 1] to the true geometric length of the curve
-        t *= 0.5 + 0.5 * 2 * (len(self.no_walls_linear_list) - 2) + 0.5
+        t *= 0.5 * (1 + 2 * (len(self.no_walls_linear_list) - 2) + 1)
 
         # compute number of half-edges traversed (including the current one)
-        n_straights = np.ceil(t / 0.5)
+        t_leg = 1 if t <= 0.0 else np.ceil(t / 0.5)
 
         # then, find the cube, check to see how much progress t has made in the cube, and then work out the coordinate
         # from there.
-        if n_straights == 1:
+        if t_leg == 1:
             t_point = np.ones(self.dim) * 0.5
             t_point[-1] += t
-        elif n_straights == 1 + 2 * (len(self.no_walls_linear_list) - 2) + 1:
+        elif t_leg == 1 + 2 * (len(self.no_walls_linear_list) - 2) + 1:
             cube_coords = np.array(self.no_walls_linear_list[-1])
-            t_backup = 0.5 - (t - (n_straights - 1) * 0.5)
+            t_backup = 0.5 - (t - (t_leg - 1) * 0.5)
             t_point = cube_coords + np.ones(self.dim) * 0.5
             t_point[-1] += t_backup
 
         else:
-            cube = self.no_walls_linear_list[int((n_straights - 1) / 2)]
+            cube = self.no_walls_linear_list[int((t_leg - 1) / 2)]
             t_point = np.array(cube) + np.ones(self.dim) * 0.5
-            if n_straights % 2 == 0:  # if we are on the first (entrance) leg of the cube
-                t_backup = 0.5 - (t - (n_straights - 1) * 0.5)
+            if t_leg % 2 == 0:  # if we are on the first (entrance) leg of the cube
+                t_backup = 0.5 - (t - (t_leg - 1) * 0.5)
                 pred_cube = self.no_walls_graph.predecessors(cube).__next__()
                 dir_to_entrance = np.array(pred_cube) - np.array(cube)
                 t_point += t_backup * dir_to_entrance
 
             else:  # if we are on the second (exit) leg of the cube
-                t_forward = t - (n_straights - 1) * 0.5
-                succ_cube = self.no_walls_graph.successors(cube)
+                t_forward = t - (t_leg - 1) * 0.5
+                succ_cube = self.no_walls_graph.successors(cube).__next__()
                 dir_to_exit = np.array(succ_cube) - np.array(cube)
                 t_point += t_forward * dir_to_exit
 

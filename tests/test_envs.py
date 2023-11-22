@@ -427,13 +427,13 @@ class TestGrayCodeEnvCurveRep:
         assert not errors
 
     def test_cube_transition(self):
-        ts = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5]
+        ts = np.array([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5]) / self.curve_len_even
         cube_centers = np.array(self.env_even.no_walls_linear_list) + np.ones(3) * 0.5
-        divider_locations = (cube_centers + cube_centers[1:])[:-1] / 2
+        divider_locations = (cube_centers[:-1] + cube_centers[1:]) / 2
 
         errors = []
-        for ti, (ts, divider) in enumerate(zip(ts, divider_locations)):
-            mapped_point = self.env_even.arclength_to_curve_point(ti)
+        for ti, (_t, divider) in enumerate(zip(ts, divider_locations)):
+            mapped_point = self.env_even.arclength_to_curve_point(_t)
             if mapped_point != approx(divider):
                 errors.append('Inccorect point mapping in divider between blocks %i and %i, expected %s, received %s.' %
                               (ti, ti + 1, str(divider), str(mapped_point)))
