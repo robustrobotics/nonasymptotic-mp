@@ -93,6 +93,9 @@ class GrayCodeWalls:
         self.length = length
         self.thickness = thickness
 
+        # helpful quantity for solution curve computations
+        self.curve_arclength = 0.5 * (1 + 2 * (len(self.no_walls_linear_list) - 2) + 1)
+
     def distance_to_wall(self, x):
         assert x.shape == (self.dim,)
 
@@ -151,7 +154,7 @@ class GrayCodeWalls:
 
     def arclength_to_curve_point(self, t_normed):
         # set to scale from [0, 1] to the true geometric length of the curve
-        t = t_normed * 0.5 * (1 + 2 * (len(self.no_walls_linear_list) - 2) + 1)
+        t = np.clip(t_normed, 0, 1) * self.curve_arclength
 
         # compute number of half-edges traversed (including the current one)
         t_leg = 1 if t <= 0.0 else np.ceil(t / 0.5)
@@ -183,6 +186,10 @@ class GrayCodeWalls:
                 t_point += t_forward * dir_to_exit
 
         return t_point
+
+    def get_curve_arclength(self):
+        return self.curve_arclength
+
 
     def _transform_sample_to_global_frame(self, unit_sample, cuboid_coords, region):
 
