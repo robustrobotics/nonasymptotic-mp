@@ -300,7 +300,7 @@ class TestGrayCodeEnvCurveRep:
     env_even = GrayCodeWalls(3, 2, 0.1)
     n_legs_even = 1 + 2 * 6 + 1
     curve_len_even = n_legs_even * 0.5
-    
+
     n_test_points = 10
 
     def test_first_cube(self):
@@ -439,3 +439,75 @@ class TestGrayCodeEnvCurveRep:
             if mapped_point != approx(divider):
                 errors.append('Inccorect point mapping in divider between blocks %i and %i, expected %s, received %s.' %
                               (ti, ti + 1, str(divider), str(mapped_point)))
+
+        assert not errors
+
+
+class TestGrayCodeEnvMotionValidityChecker:
+    env = GrayCodeWalls(2, 2, 0.375)
+    start_center = np.array([0.5, 0.5])
+    two_block_goal_center = np.array([0.5, 1.5])
+    three_block_goal_center = np.array([1.5, 1.5])
+
+    def test_same_block_start_is_valid_goal_is_invalid(self):
+        start = self.start_center + np.array([-0.1, -0.1])
+        goal = self.start_center + np.array([0.126, 0.0])
+        assert not self.env.is_motion_valid(start, goal)
+
+    def test_same_block_start_is_invalid_goal_is_valid(self):
+        start = self.start_center + np.array([0.126, 0.0])
+        goal = self.start_center + np.array([-0.1, -0.1])
+        assert not self.env.is_motion_valid(start, goal)
+
+    def test_same_block_start_and_goal_valid(self):
+        start = self.start_center + np.array([-0.1, -0.1])
+        goal = self.start_center + np.array([0.1, 0.1])
+        assert self.env.is_motion_valid(start, goal)
+
+    def test_same_block_start_and_goal_invalid(self):
+        start = self.start_center + np.array([-0.126, -0.1])
+        goal = self.start_center + np.array([0.1, 0.126])
+        assert not self.env.is_motion_valid(start, goal)
+
+    def test_two_blocks_corner_clip(self):
+        start = self.start_center + np.array([0.124, -0.124])
+        goal = self.two_block_goal_center + np.array([0.49, -0.124])
+        assert not self.env.is_motion_valid(start, goal)
+
+    def test_two_blocks_valid_in_hallway_projection(self):
+        start = self.start_center
+        goal = self.two_block_goal_center
+        assert self.env.is_motion_valid(start, goal)
+
+    def test_two_blocks_valid_corner_dodge(self):
+        start = self.start_center + np.array([-0.124, 0.49])
+        goal = self.two_block_goal_center + np.array([0.49, 0.124])
+        assert self.env.is_motion_valid(start, goal)
+
+    def test_two_blocks_run_along_wall(self):
+        # this is a measure edge case that we'd _like" to pass, but won't
+        # ever realistically happen.
+        start = self.two_block_goal_center + np.array([0.0, -0.25])
+        goal = self.three_block_goal_center + np.array([0.0, -0.25])
+        assert self.env.is_motion_valid(start, goal)
+
+    def test_three_blocks_corner_clip(self):
+        start = self.start_center
+        goal = self.three_block_goal_center + np.array([0.0, 0.1])
+        assert not self.env.is_motion_valid(start, goal)
+
+    def test_three_blocks_corner_dodge(self):
+        start = self.start_center + np.array([-0.124, 0.49])
+        goal = self.three_block_goal_center + np.array([-0.49, 0.124])
+        assert self.env.is_motion_valid(start, goal)
+
+    def test_four_blocks_wall_breach_at_perp(self):
+        start = self.start_center
+        goal = self.start_center + np.array([0.5, 0.0])
+        assert not self.env.is_motion_valid(start, goal)
+
+    def test_four_blocks_wall_breach_not_perp(self):
+        start = self.start_center
+        goal = self.start_center + np.array([0.5, -0.1])
+        assert not self.env.is_motion_valid(start, goal)
+

@@ -200,16 +200,16 @@ class GrayCodeWalls:
         start_cube = np.floor(start).astype('int64')
 
         # check if we are searching forward or backward.
-        searching_forward = goal_cube in nx.dfs_successors(self.no_walls_graph, start_cube).values()
+        searching_forward = [tuple(goal_cube)] in nx.dfs_successors(self.no_walls_graph, tuple(start_cube)).values()
 
-        while start_cube != goal_cube:
+        while np.any(start_cube != goal_cube):
             # find line constants. We'll parameterize it as a line l: [0, 1] \to \{env\} as a fun
             # of [0, 1], where l(0) = start and l(1) = goal
             dir_vec = goal - start
 
             # find the next cube so we can find the shared opening.
-            next_cube = self.no_walls_graph.successors(start_cube).__next__() if searching_forward \
-                else self.no_walls_graph.predecessors(start_cube).__next__()
+            next_cube = self.no_walls_graph.successors(tuple(start_cube)).__next__() if searching_forward \
+                else self.no_walls_graph.predecessors(tuple(start_cube)).__next__()
             next_cube = np.array(next_cube)
 
             # find the search direction between cubes
@@ -223,7 +223,11 @@ class GrayCodeWalls:
 
             # solve for point at cube opening.
             t = (between_cubes_point[next_cube_dir_ind] - start[next_cube_dir_ind]) / dir_vec[next_cube_dir_ind]
-            if t <= 0.0:  # does not exit at this face is t = 0 or is going the wrong way
+            if t < 0.0:  # does not exit at this face is t = 0 or is going the wrong way
+                raise RuntimeError('Motion check is proceeding away from goal point!')
+            elif t == 0.0 or np.any(np.isnan(t)):
+                # we are only in while loop if we are spanning multiple blocks. so if t = 0 or nan, then line does
+                # not travel through the exit of this block on the path, so it must have collided somewhere else
                 return False
             motion_point_at_opening = dir_vec * t + start
 
@@ -231,7 +235,7 @@ class GrayCodeWalls:
             # a different computation than distance_to_wall, which returns differently at a measure 0
             # set of points (but that set matters here)
             if (self._distance_to_wall_in_cube(start_cube, start) < 0.0
-                    or self._distance_to_wall_in_cube(start_cube, motion_point_at_opening)):
+                    or self._distance_to_wall_in_cube(start_cube, motion_point_at_opening) < 0.0):
                 return False
 
             start = motion_point_at_opening
@@ -302,8 +306,5 @@ class GrayCodeWalls:
 
 
 if __name__ == '__main__':
-    walls = GrayCodeWalls(3, 3, 0.1)
-    print(walls.no_walls_linear_list)
-
-    walls = GrayCodeWalls(3, 2, 0.1)
+    walls = GrayCodeWalls(2, 2, 0.125)
     print(walls.no_walls_linear_list)
