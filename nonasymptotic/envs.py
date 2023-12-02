@@ -102,24 +102,26 @@ class GrayCodeWalls:
         # begin by rounding to know which hypercube we are in
         cube_coords = np.floor(x).astype('int64')
 
+        return self._distance_to_wall_in_cube(cube_coords, x)
+
+    def _distance_to_wall_in_cube(self, cube_coords, x):
+        # sometimes, for a measure zero set of points, it's useful to manually specify
+        # exactly which cube we're in. but we need to be careful when doing this, which is
+        # why this is given as only an internal helper method.
+
         # translate to cube center
         x_c = x - (cube_coords + 0.5)
-
         # get neighbors so we know there are free passageways
         neighbors = (list(self.no_walls_graph.predecessors(tuple(cube_coords)))
                      + list(self.no_walls_graph.successors(tuple(cube_coords))))
-
         # fill in coordinates of walls, accounting for neighbors with no walls
         walls_low = np.ones(self.dim) * -0.5
         walls_high = np.ones(self.dim) * 0.5
-
         for i in range(len(neighbors)):
             walls_low, walls_high = self._unblock_wall(
                 cube_coords, np.array(neighbors[i]), walls_low, walls_high)
-
         walls_low_dists = np.abs(x_c - walls_low)
         walls_high_dists = np.abs(x_c - walls_high)
-
         return min(np.min(walls_low_dists), np.min(walls_high_dists)) - self.thickness
 
     def sample_from_env(self):
@@ -190,6 +192,53 @@ class GrayCodeWalls:
     def get_curve_arclength(self):
         return self.curve_arclength
 
+    def is_motion_valid(self, start, goal):
+        # we're doing this as an exact computation, so then we can have exact experiment results.
+        # this will also save computational power in the long run.
+
+        goal_cube = np.floor(goal).astype('int64')
+        start_cube = np.floor(start).astype('int64')
+
+        # check if we are searching forward or backward.
+        searching_forward = goal_cube in nx.dfs_successors(self.no_walls_graph, start_cube).values()
+
+        while start_cube != goal_cube:
+            # find line constants. We'll parameterize it as a line l: [0, 1] \to \{env\} as a fun
+            # of [0, 1], where l(0) = start and l(1) = goal
+            dir_vec = goal - start
+
+            # find the next cube so we can find the shared opening.
+            next_cube = self.no_walls_graph.successors(start_cube).__next__() if searching_forward \
+                else self.no_walls_graph.predecessors(start_cube).__next__()
+            next_cube = np.array(next_cube)
+
+            # find the search direction between cubes
+            next_cube_dir = next_cube - start_cube
+            next_cube_dir_ind = np.where(next_cube_dir)
+
+            # compute shared opening on path:
+            start_cube_center = start_cube + np.ones(self.dim) * 0.5
+            next_cube_center = goal_cube + np.ones(self.dim) * 0.5
+            between_cubes_point = (start_cube_center + next_cube_center) / 2
+
+            # solve for point at cube opening.
+            t = (between_cubes_point[next_cube_dir_ind] - start[next_cube_dir_ind]) / dir_vec[next_cube_dir_ind]
+            if t <= 0.0:  # does not exit at this face is t = 0 or is going the wrong way
+                return False
+            motion_point_at_opening = dir_vec * t + start
+
+            # check if start and mp@opening point are not in collision. this is a slightly
+            # a different computation than distance_to_wall, which returns differently at a measure 0
+            # set of points (but that set matters here)
+            if (self._distance_to_wall_in_cube(start_cube, start) < 0.0
+                    or self._distance_to_wall_in_cube(start_cube, motion_point_at_opening)):
+                return False
+
+            start = motion_point_at_opening
+            start_cube = next_cube  # this needs to be done so we don't get trapped in the same cube
+
+        # if start and goal are in the same cube, then return true because cubes are convex
+        return self.distance_to_wall(start) >= 0.0 and self.distance_to_wall(goal) >= 0.0
 
     def _transform_sample_to_global_frame(self, unit_sample, cuboid_coords, region):
 
