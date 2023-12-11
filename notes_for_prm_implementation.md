@@ -1,10 +1,10 @@
 # PRM Implementation (since ompl doesn't give us the level of control we need)
 
 ## Ingredients:
-- Efficient and relatively accurate NN datastructure
-- An alternate way to represent the roadmap grap
-- An efficient implementation of a graph search algorithm.
-- A way to check the validity of edges given our current representation of the hypercube environment.
+- Efficient and relatively accurate NN datastructure (pynndescent?)
+- An alternate way to represent the roadmap grap (networkit?)
+- An efficient implementation of a graph search algorithm. (networkit?)
+- A way to check the validity of edges given our current representation of the hypercube environment. (Done!)
 
 ## Interface Requirements:
 - Similar interface to OMPL... except we only care about real vector spaces with the default Euclidean metric
