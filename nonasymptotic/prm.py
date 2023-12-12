@@ -1,6 +1,6 @@
 import numpy as np
 import pynndescent as pynn
-import networkit as ni
+import networkit as nk
 
 
 class SimplePRM:
@@ -16,6 +16,8 @@ class SimplePRM:
         self.samples = None
         self.nn_index = None
 
+        self.g_prm = None
+
     def grow_to_n_samples(self, n_samples):
 
         # sample new states
@@ -26,7 +28,26 @@ class SimplePRM:
                 self.samples[i, :] = self.sample_state()
 
             self.nn_index = pynn.NNDescent(self.samples, verbose=True)  # Euclidean metric is default
-                                                          # TODO: tinker with the NN tree parameters
+            # TODO: tinker with the NN tree parameters
+
+            self.g_prm = nk.Graph(n_samples, weighted=True)
+
+            batch_size = 64
+            for i_batch in range(0, n_samples, batch_size):
+                node_batch = self.samples[i_batch:i_batch + batch_size]
+                indices, distances = self.nn_index.query(node_batch)
+
+                for i_node in range(indices.shape[0]):
+                    node_i = self.samples[i_node]
+
+                    for j_neighbor in indices[i_node]:
+                        neighbor_j = self.samples[j_neighbor]
+                        if self.check_motion(node_i, neighbor_j):
+                            d_ij = np.linalg.norm(node_i - neighbor_j)
+                            if d_ij < self.conn_r:
+                                self.g_prm.addEdge(i_batch + i_node, j_neighbor,
+                                                   w=d_ij, checkMultiEdge=True)
+
 
         else:  # otherwise, we reuse past computation
             past_n_samples = self.samples.shape[0]
@@ -52,4 +73,10 @@ class SimplePRM:
         pass
 
     def reset(self):
+        pass
+
+    def save(self):
+        pass
+
+    def load(self):
         pass
