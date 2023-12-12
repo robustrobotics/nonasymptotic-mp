@@ -120,8 +120,8 @@ class GrayCodeWalls:
         for i in range(len(neighbors)):
             walls_low, walls_high = self._unblock_wall(
                 cube_coords, np.array(neighbors[i]), walls_low, walls_high)
-        walls_low_dists = np.abs(x_c - walls_low)
-        walls_high_dists = np.abs(x_c - walls_high)
+        walls_low_dists = x_c - walls_low
+        walls_high_dists = walls_high - x_c
         return min(np.min(walls_low_dists), np.min(walls_high_dists)) - self.thickness
 
     def sample_from_env(self):
@@ -196,8 +196,8 @@ class GrayCodeWalls:
         # we're doing this as an exact computation, so then we can have exact experiment results.
         # this will also save computational power in the long run.
 
-        goal_cube = np.floor(goal).astype('int64')
         start_cube = np.floor(start).astype('int64')
+        goal_cube = np.floor(goal).astype('int64')
 
         # check if we are searching forward or backward.
         searching_forward = [tuple(goal_cube)] in nx.dfs_successors(self.no_walls_graph, tuple(start_cube)).values()
@@ -223,9 +223,7 @@ class GrayCodeWalls:
 
             # solve for point at cube opening.
             t = (between_cubes_point[next_cube_dir_ind] - start[next_cube_dir_ind]) / dir_vec[next_cube_dir_ind]
-            if t < 0.0:  # does not exit at this face is t = 0 or is going the wrong way
-                raise RuntimeError('Motion check is proceeding away from goal point!')
-            elif t == 0.0 or np.any(np.isnan(t)):
+            if t <= 0.0 or np.any(np.isnan(t)):
                 # we are only in while loop if we are spanning multiple blocks. so if t = 0 or nan, then line does
                 # not travel through the exit of this block on the path, so it must have collided somewhere else
                 return False

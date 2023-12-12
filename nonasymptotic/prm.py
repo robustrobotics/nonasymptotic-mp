@@ -77,9 +77,8 @@ class SimplePRM:
                             d_ij = np.linalg.norm(node_i - neighbor_j)
 
                             if d_ij < self.conn_r:
-                                self.g_prm.addEdge(m_new_samples + i_batch+ i_node, j_neighbor,
+                                self.g_prm.addEdge(m_new_samples + i_batch + i_node, j_neighbor,
                                                    w=d_ij, checkMultiEdge=True)
-
 
     def query_solution(self, start, goal):
         pass
@@ -101,3 +100,11 @@ class SimplePRM:
 
     def load(self):
         pass
+
+
+if __name__ == '__main__':
+    from envs import GrayCodeWalls
+
+    walls = GrayCodeWalls(2, 2, 0.1)
+    prm = SimplePRM(0.2, walls.is_motion_valid, walls.sample_from_env)
+    prm.grow_to_n_samples(100000)

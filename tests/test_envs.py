@@ -449,6 +449,8 @@ class TestGrayCodeEnvMotionValidityChecker:
     two_block_goal_center = np.array([0.5, 1.5])
     three_block_goal_center = np.array([1.5, 1.5])
 
+    anti_regression_env = GrayCodeWalls(2, 2, 0.1)
+
     def test_same_block_start_is_valid_goal_is_invalid(self):
         start = self.start_center + np.array([-0.1, -0.1])
         goal = self.start_center + np.array([0.126, 0.0])
@@ -510,4 +512,10 @@ class TestGrayCodeEnvMotionValidityChecker:
         start = self.start_center
         goal = self.start_center + np.array([0.5, -0.1])
         assert not self.env.is_motion_valid(start, goal)
+
+    def test_no_opener_solve_puts_start_point_out_of_end(self):
+        start = np.array([1.127, 0.26])
+        goal = np.array([0.802, 0.3702])
+        assert not self.anti_regression_env.is_motion_valid(start, goal)
+
 
