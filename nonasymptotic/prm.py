@@ -40,11 +40,10 @@ class SimplePRM:
                 for i_node in range(indices.shape[0]):
                     node_i = query_node_batch[i_node]
 
-                    for j_neighbor in indices[i_node]:
+                    for j_neighbor, d_ij in zip(indices[i_node], distances[i_node]):
                         neighbor_j = self.samples[j_neighbor]
 
                         if self.check_motion(node_i, neighbor_j):
-                            d_ij = np.linalg.norm(node_i - neighbor_j)
 
                             if d_ij < self.conn_r:
                                 self.g_prm.addEdge(i_batch + i_node, j_neighbor,
@@ -70,18 +69,44 @@ class SimplePRM:
                 for i_node in range(indices.shape[0]):
                     node_i = query_node_batch[i_node]
 
-                    for j_neighbor in indices[i_node]:
+                    for j_neighbor, d_ij in zip(indices[i_node], distances[i_node]):
                         neighbor_j = self.samples[j_neighbor]
 
                         if self.check_motion(node_i, neighbor_j):
-                            d_ij = np.linalg.norm(node_i - neighbor_j)
+                            d_ij = distances[i_node, j_neighbor]
 
                             if d_ij < self.conn_r:
                                 self.g_prm.addEdge(m_new_samples + i_batch + i_node, j_neighbor,
                                                    w=d_ij, checkMultiEdge=True)
 
     def query_solution(self, start, goal):
-        pass
+        # NOTE: if there isn't a solution... will return an infinite distance. This is
+        # just a quirk of networkit that we just need to work around.
+
+        # Returned path is excluding the endpoints
+
+        # first, loop start and goal into graph
+        indices, distances = self.nn_index.query(np.vstack([start, goal]))
+
+        i_goal = self.g_prm.addNodes(2)
+        i_start = i_goal - 1
+
+        for j_neighbor, d_ij in distances(indices[0], distances[0]):
+            self.g_prm.addEdge(i_start, j_neighbor, w=d_ij)
+
+        for j_neighbor, d_ij in distances(indices[1], distances[1]):
+            self.g_prm.addEdge(i_goal, j_neighbor, w=d_ij)
+
+        biDij = nk.distance.BidirectionalDijkstra(self.g_prm, i_start, i_goal)
+        biDij.run()
+
+        sol_dist = biDij.getDistance()
+
+        # delete start/goal from graph for next query
+        self.g_prm.removeNode(i_start)
+        self.g_prm.removeNode(i_goal)
+
+        return sol_dist
 
     def query_same_component(self, v1, v2):
         pass
