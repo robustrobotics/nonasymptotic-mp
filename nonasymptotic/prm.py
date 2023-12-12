@@ -19,6 +19,7 @@ class SimplePRM:
         self.g_prm = None
 
     def grow_to_n_samples(self, n_samples):
+        batch_size = 64
 
         # sample new states
         if self.samples is None:  # if new, initialize everything
@@ -32,22 +33,22 @@ class SimplePRM:
 
             self.g_prm = nk.Graph(n_samples, weighted=True)
 
-            batch_size = 64
             for i_batch in range(0, n_samples, batch_size):
-                node_batch = self.samples[i_batch:i_batch + batch_size]
-                indices, distances = self.nn_index.query(node_batch)
+                query_node_batch = self.samples[i_batch:i_batch + batch_size]
+                indices, distances = self.nn_index.query(query_node_batch)
 
                 for i_node in range(indices.shape[0]):
-                    node_i = self.samples[i_node]
+                    node_i = query_node_batch[i_node]
 
                     for j_neighbor in indices[i_node]:
                         neighbor_j = self.samples[j_neighbor]
+
                         if self.check_motion(node_i, neighbor_j):
                             d_ij = np.linalg.norm(node_i - neighbor_j)
+
                             if d_ij < self.conn_r:
                                 self.g_prm.addEdge(i_batch + i_node, j_neighbor,
                                                    w=d_ij, checkMultiEdge=True)
-
 
         else:  # otherwise, we reuse past computation
             past_n_samples = self.samples.shape[0]
@@ -59,6 +60,26 @@ class SimplePRM:
 
             self.nn_index.update(xs_fresh=new_samples)
             self.samples = np.concatenate([self.samples, new_samples])
+
+            self.g_prm.addNodes(m_new_samples)
+
+            for i_batch in range(0, m_new_samples, batch_size):
+                query_node_batch = self.samples[i_batch:i_batch + batch_size]
+                indices, distances = self.nn_index.query(query_node_batch)
+
+                for i_node in range(indices.shape[0]):
+                    node_i = query_node_batch[i_node]
+
+                    for j_neighbor in indices[i_node]:
+                        neighbor_j = self.samples[j_neighbor]
+
+                        if self.check_motion(node_i, neighbor_j):
+                            d_ij = np.linalg.norm(node_i - neighbor_j)
+
+                            if d_ij < self.conn_r:
+                                self.g_prm.addEdge(m_new_samples + i_batch+ i_node, j_neighbor,
+                                                   w=d_ij, checkMultiEdge=True)
+
 
     def query_solution(self, start, goal):
         pass
