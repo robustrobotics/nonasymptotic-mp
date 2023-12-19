@@ -17,6 +17,7 @@ class SimplePRM:
         self.nn_index = None
 
         self.g_prm = None
+        self.g_cc = None
 
     def grow_to_n_samples(self, n_samples):
         batch_size = 64
@@ -79,6 +80,9 @@ class SimplePRM:
                                 self.g_prm.addEdge(m_new_samples + i_batch + i_node, j_neighbor,
                                                    w=d_ij, checkMultiEdge=True)
 
+        self.g_cc = nk.components.ConnectedComponents(self.g_prm)
+        self.g_cc.run()
+
     def query_solution(self, start, goal):
         # NOTE: if there isn't a solution... will return an infinite distance. This is
         # just a quirk of networkit that we just need to work around.
@@ -109,22 +113,28 @@ class SimplePRM:
         return sol_dist
 
     def query_same_component(self, v1, v2):
-        pass
+        if not self.g_prm.hasNode(v1) or not self.g_prm.hasNode(v2):
+            raise RuntimeError('v1 or v2 not in the PRM.')
+
+        return self.g_cc.componentOfNode(v1) == self.g_cc.componentOfNode(v2)
 
     def num_vertices(self):
-        pass
+        return self.g_prm.numberOfNodes() if self.g_prm is not None else 0
 
     def num_edges(self):
-        pass
+        return self.g_prm.numberOfEdges() if self.g_prm is not None else 0
 
     def reset(self):
-        pass
+        self.g_prm = None
+        self.g_cc = None
+        self.samples = None
+        self.nn_index = None
 
-    def save(self):
-        pass
-
-    def load(self):
-        pass
+    def save(self, filepath):
+        if self.g_prm is not None:
+            nk.writeGraph(self.g_prm, filepath, nk.Format.NetworkitBinary)
+        else:
+            raise RuntimeWarning('Tried to save an uninitialized PRM.')
 
 
 if __name__ == '__main__':
