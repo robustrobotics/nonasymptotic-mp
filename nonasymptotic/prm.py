@@ -95,28 +95,29 @@ class SimplePRM:
         i_goal = self.g_prm.addNodes(2)
         i_start = i_goal - 1
 
-        for j_neighbor, d_ij in distances(indices[0], distances[0]):
+        for j_neighbor, d_ij in zip(indices[0], distances[0]):
             self.g_prm.addEdge(i_start, j_neighbor, w=d_ij)
 
-        for j_neighbor, d_ij in distances(indices[1], distances[1]):
+        for j_neighbor, d_ij in zip(indices[1], distances[1]):
             self.g_prm.addEdge(i_goal, j_neighbor, w=d_ij)
 
         biDij = nk.distance.BidirectionalDijkstra(self.g_prm, i_start, i_goal)
         biDij.run()
 
         sol_dist = biDij.getDistance()
+        sol_path = self.samples[biDij.getPath()]
 
         # delete start/goal from graph for next query
         self.g_prm.removeNode(i_start)
         self.g_prm.removeNode(i_goal)
 
-        return sol_dist
+        return sol_dist, sol_path
 
-    def query_same_component(self, v1, v2):
-        if not self.g_prm.hasNode(v1) or not self.g_prm.hasNode(v2):
-            raise RuntimeError('v1 or v2 not in the PRM.')
-
-        return self.g_cc.componentOfNode(v1) == self.g_cc.componentOfNode(v2)
+    # def query_same_component(self, v1, v2):
+    #     if not self.g_prm.hasNode(v1) or not self.g_prm.hasNode(v2):
+    #         raise RuntimeError('v1 or v2 not in the PRM.')
+    #
+    #     return self.g_cc.componentOfNode(v1) == self.g_cc.componentOfNode(v2)
 
     def num_vertices(self):
         return self.g_prm.numberOfNodes() if self.g_prm is not None else 0
