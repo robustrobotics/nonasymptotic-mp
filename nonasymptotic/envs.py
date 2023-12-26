@@ -4,20 +4,59 @@ import numpy as np
 
 import copy
 from enum import Enum
+from abc import ABC, abstractmethod
 
 
-class MidCuboidRegions(Enum):
-    PASSAGE1 = 0
-    CENTER = 1
-    PASSAGE2 = 2
+class Environment(ABC):
+
+    @abstractmethod
+    def sample_from_env(self):
+        pass
+
+    @abstractmethod
+    def arclength_to_curve_point(self, t_normed):
+        pass
+
+    @abstractmethod
+    def is_motion_valid(self, start, goal):
+        pass
 
 
-class EndCuboidRegions(Enum):
-    PASSAGE = 3
-    CENTER = 4
+class StraightLine(Environment):
+    """
+    Constructs a straight line of length 1 in a box environment with
+    the given delta_clearance.
+    """
+
+    def __init__(self, dim, delta_clearance):
+        assert dim >= 2
+        assert delta_clearance >= 0
+
+        # define the box bounds. first dim will be the one containing the line. the remaining
+        # will just be delta-tube in the l_infinity norm.
+        self.bounds_lower = np.array([-delta_clearance] + [-delta_clearance] * dim)
+        self.bounds_upper = np.array([1.0 + delta_clearance] + [delta_clearance] * dim)
+
+        self.dim = dim
+        self.rng = np.random.default_rng()
+
+    def sample_from_env(self):
+        return self.rng.uniform(self.bounds_lower, self.bounds_upper)
+
+    def arclength_to_curve_point(self, t_normed):
+        t = np.clip(t_normed, 0.0, 1.0)
+        point_on_curve = np.zeros(self.dim)
+        point_on_curve[0] += t
+        return point_on_curve
+
+    def is_motion_valid(self, start, goal):
+        # take advantage of fact that shape is convex
+        start_valid = np.all(start >= self.bounds_lower) and np.all(start <= self.bounds_upper)
+        goal_valid = np.all(start >= self.bounds_lower) and np.all(start <= self.bounds_upper)
+        return start_valid and goal_valid
 
 
-class GrayCodeWalls:
+class GrayCodeWalls(Environment):
     def __init__(self, dim, length, thickness=0.0):
         assert dim >= 2
         assert length > 0
@@ -301,6 +340,17 @@ class GrayCodeWalls:
                 list_of_coords
             )
         )
+
+
+class MidCuboidRegions(Enum):
+    PASSAGE1 = 0
+    CENTER = 1
+    PASSAGE2 = 2
+
+
+class EndCuboidRegions(Enum):
+    PASSAGE = 3
+    CENTER = 4
 
 
 if __name__ == '__main__':

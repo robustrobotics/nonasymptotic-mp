@@ -63,6 +63,9 @@ class SimplePRM:
 
             self.g_prm.addNodes(m_new_samples)
 
+            # TODO: if this is a big problem, a good amount of computation hangs here.
+            # There is probably a trick of exporting to some graph visualization format
+            # that will allow us to offload most of the graph loading to some cpp code.
             for i_batch in range(0, m_new_samples, batch_size):
                 query_node_batch = self.samples[i_batch:i_batch + batch_size]
                 indices, distances = self.nn_index.query(query_node_batch)
