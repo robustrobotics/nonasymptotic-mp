@@ -2,7 +2,9 @@ import numpy as np
 import pynndescent as pynn
 import networkit as nk
 
+from itertools import product
 
+# TODO: easy speedup: add to graph in bulk
 class SimplePRM:
     def __init__(self, connection_rad, motion_validity_checker, valid_state_sampler, k_connection_neighbors=20):
         self.d = valid_state_sampler().size  # dummy sample to compute dimension
@@ -86,7 +88,7 @@ class SimplePRM:
         self.g_cc = nk.components.ConnectedComponents(self.g_prm)
         self.g_cc.run()
 
-    def query_solution(self, start, goal):
+    def query_best_solution(self, start, goal):
         # NOTE: if there isn't a solution... will return an infinite distance. This is
         # just a quirk of networkit that we just need to work around.
 
@@ -99,10 +101,14 @@ class SimplePRM:
         i_start = i_goal - 1
 
         for j_neighbor, d_ij in zip(indices[0], distances[0]):
-            self.g_prm.addEdge(i_start, j_neighbor, w=d_ij)
+            neighbor_j = self.samples[j_neighbor]
+            if d_ij < self.conn_r and self.check_motion(start, neighbor_j):
+                self.g_prm.addEdge(i_start, j_neighbor, w=d_ij)
 
         for j_neighbor, d_ij in zip(indices[1], distances[1]):
-            self.g_prm.addEdge(i_goal, j_neighbor, w=d_ij)
+            neighbor_j = self.samples[j_neighbor]
+            if d_ij < self.conn_r and self.check_motion(goal, neighbor_j):
+                self.g_prm.addEdge(i_goal, j_neighbor, w=d_ij)
 
         biDij = nk.distance.BidirectionalDijkstra(self.g_prm, i_start, i_goal)
         biDij.run()
@@ -121,6 +127,26 @@ class SimplePRM:
     #         raise RuntimeError('v1 or v2 not in the PRM.')
     #
     #     return self.g_cc.componentOfNode(v1) == self.g_cc.componentOfNode(v2)
+
+    def query_all_solutions(self, start, goal):
+        indices, distances = self.nn_index.query(np.vstack([start, goal]))
+
+        start_nns = indices[0, distances[0] < self.conn_r]
+        goal_nns = indices[1, distances[1] < self.conn_r]
+
+        start_nns = filter(lambda n_i: self.check_motion(start, self.samples[n_i]), start_nns)
+        goal_nns = filter(lambda n_i: self.check_motion(goal, self.samples[n_i]),goal_nns)
+
+        # now we have indices, let's do some shortest path computations
+        spsp = nk.distance.SPSP(self.g_prm, list(start_nns))
+        spsp.setTargets(list(goal_nns))
+        spsp.run()
+
+        prm_sols_in_and_outs = product(start_nns, goal_nns)
+        prm_sols_distances = map(lambda ij: spsp.getDistance(ij[0], ij[1]), prm_sols_in_and_outs)
+
+        return list(prm_sols_in_and_outs), list(prm_sols_distances)
+
 
     def num_vertices(self):
         return self.g_prm.numberOfNodes() if self.g_prm is not None else 0
@@ -146,4 +172,5 @@ if __name__ == '__main__':
 
     walls = GrayCodeWalls(2, 2, 0.1)
     prm = SimplePRM(0.2, walls.is_motion_valid, walls.sample_from_env)
-    prm.grow_to_n_samples(100000)
+    prm.grow_to_n_samples(1000)
+    print('hi')
