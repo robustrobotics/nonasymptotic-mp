@@ -1,4 +1,6 @@
 from sympy.combinatorics.graycode import GrayCode
+from shapely import Polygon, MultiPolygon
+from scipy.spatial import ConvexHull
 import networkx as nx
 import numpy as np
 
@@ -19,6 +21,9 @@ class Environment(ABC):
 
     @abstractmethod
     def is_motion_valid(self, start, goal):
+        pass
+    @abstractmethod
+    def is_prm_epsilon_delta_complete(self, prm, tol):
         pass
 
 
@@ -54,6 +59,58 @@ class StraightLine(Environment):
         start_valid = np.all(start >= self.bounds_lower) and np.all(start <= self.bounds_upper)
         goal_valid = np.all(start >= self.bounds_lower) and np.all(start <= self.bounds_upper)
         return start_valid and goal_valid
+
+    def is_prm_epsilon_delta_complete(self, prm, tol, timeout=5.0):
+        rng = np.random.default_rng()
+        conn_r = prm.conn_r
+        prm_points_to_cvx_hull = {}
+
+        length_space_to_cover = Polygon([(0.0, conn_r), (0.0, 1.0), (1.0 - conn_r, 1.0)])
+
+        # sample a point
+        unit_square_sample = rng.uniform(low=[0.0, 0.0], high=[1.0, 1.0])
+        unit_triangle_sample = np.sort(unit_square_sample)
+        length_space_sample = ((1.0 - conn_r) * (unit_triangle_sample - np.array([0.0, 1.0]))) + np.array([0.0, 1.0])
+
+        # use prm to find the valid queries (with respect to epsilon delta completeness)
+        t_start = length_space_sample[0]
+        t_goal = length_space_sample[1]
+        start = self.arclength_to_curve_point(t_start)
+        goal = self.arclength_to_curve_point(t_goal)
+
+        path_length = t_start - t_goal
+
+        sols_in_and_outs, sols_distances = prm.query_all_graph_connections(start, goal)
+        valid_pairs = (sols_distances
+                       + np.linalg.norm(start - sols_in_and_outs[0], axis=1)
+                       + np.linalg.norm(goal - sols_in_and_outs[1], axis=1)) <= path_length * (1 + tol)
+
+        # if there are no valid pairs, then return false (not epsilon delta complete)
+        if not np.any(valid_pairs):
+            return False
+
+        # TODO: add edge projection
+
+        # store valid queries in some structure that encodes the multiset
+        # compute new convex hulls.
+        valid_sols_in_and_outs = np.swapaxes(sols_in_and_outs[:, valid_pairs, :], 0, 1)
+        for prm_in, prm_out in valid_sols_in_and_outs:
+            try:
+                prm_points_to_cvx_hull[(prm_in, prm_out)].add_points([length_space_sample])
+            except KeyError:
+                prm_points_to_cvx_hull[(prm_in, prm_out)] = ConvexHull([length_space_sample], incremental=True)
+
+        # compute new union polygon...  and I think we're forced to use Shapely since CGAL is missing stuff.
+        # it appears that shapely also has a covers function... ...
+        convex_sets = map(lambda hull: Polygon(hull.vertices), prm_points_to_cvx_hull.values())
+        ranges = MultiPolygon(convex_sets)
+
+        # continue until timeout (where we confirm or deny? decide). or if we're covered return true
+        # or if we don't have an admissable solution, return false.
+        if ranges.covers(length_space_to_cover):
+            return True
+
+        # TODO: add in while loop too
 
 
 class GrayCodeWalls(Environment):
@@ -280,6 +337,9 @@ class GrayCodeWalls(Environment):
 
         # if start and goal are in the same cube, then return true because cubes are convex
         return self.distance_to_wall(start) >= 0.0 and self.distance_to_wall(goal) >= 0.0
+
+    def is_prm_epsilon_delta_complete(self, prm, tol):
+        raise NotImplementedError('Not done yet!')
 
     def _transform_sample_to_global_frame(self, unit_sample, cuboid_coords, region):
 

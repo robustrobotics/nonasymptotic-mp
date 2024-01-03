@@ -4,6 +4,7 @@ import networkit as nk
 
 from itertools import product
 
+
 # TODO: easy speedup: add to graph in bulk
 class SimplePRM:
     def __init__(self, connection_rad, motion_validity_checker, valid_state_sampler, k_connection_neighbors=20):
@@ -128,14 +129,14 @@ class SimplePRM:
     #
     #     return self.g_cc.componentOfNode(v1) == self.g_cc.componentOfNode(v2)
 
-    def query_all_solutions(self, start, goal):
+    def query_all_graph_connections(self, start, goal):
         indices, distances = self.nn_index.query(np.vstack([start, goal]))
 
         start_nns = indices[0, distances[0] < self.conn_r]
         goal_nns = indices[1, distances[1] < self.conn_r]
 
         start_nns = filter(lambda n_i: self.check_motion(start, self.samples[n_i]), start_nns)
-        goal_nns = filter(lambda n_i: self.check_motion(goal, self.samples[n_i]),goal_nns)
+        goal_nns = filter(lambda n_i: self.check_motion(goal, self.samples[n_i]), goal_nns)
 
         # now we have indices, let's do some shortest path computations
         spsp = nk.distance.SPSP(self.g_prm, list(start_nns))
@@ -145,8 +146,17 @@ class SimplePRM:
         prm_sols_in_and_outs = product(start_nns, goal_nns)
         prm_sols_distances = map(lambda ij: spsp.getDistance(ij[0], ij[1]), prm_sols_in_and_outs)
 
-        return list(prm_sols_in_and_outs), list(prm_sols_distances)
+        # force an evaluation of the datastream
+        prm_sols_in_and_outs = np.array(list(prm_sols_in_and_outs))
+        prm_sols_distances = np.array(list(prm_sols_distances))
 
+        return (
+            np.stack([
+                self.samples[prm_sols_in_and_outs[:, 0]],
+                self.samples[prm_sols_in_and_outs[:, 1]]
+            ], axis=0),
+            np.array(list(prm_sols_distances))
+        )
 
     def num_vertices(self):
         return self.g_prm.numberOfNodes() if self.g_prm is not None else 0
