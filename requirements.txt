@@ -5,4 +5,4 @@ pytest~=7.4.0
 pynndescent~=0.5.11
 networkit~=10.1
 shapely~=2.0.2
-scipy~=1.10.1
+matplotlib~=3.7.1
