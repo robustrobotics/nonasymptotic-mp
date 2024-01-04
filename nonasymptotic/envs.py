@@ -1,13 +1,15 @@
-from sympy.combinatorics.graycode import GrayCode
-from shapely import Polygon, MultiPolygon
-from scipy.spatial import ConvexHull
+import copy
+import time
+from abc import ABC, abstractmethod
+from enum import Enum
+
 import networkx as nx
 import numpy as np
-import time
-
-import copy
-from enum import Enum
-from abc import ABC, abstractmethod
+import matplotlib.pyplot as plt
+from shapely import Point, Polygon, MultiPolygon
+from shapely.ops import nearest_points
+from shapely.plotting import plot_polygon
+from sympy.combinatorics.graycode import GrayCode
 
 
 class Environment(ABC):
@@ -41,8 +43,8 @@ class StraightLine(Environment):
 
         # define the box bounds. first dim will be the one containing the line. the remaining
         # will just be delta-tube in the l_infinity norm.
-        self.bounds_lower = np.array([-delta_clearance] + [-delta_clearance] * dim)
-        self.bounds_upper = np.array([1.0 + delta_clearance] + [delta_clearance] * dim)
+        self.bounds_lower = np.array([-delta_clearance] + [-delta_clearance] * (dim - 1))
+        self.bounds_upper = np.array([1.0 + delta_clearance] + [delta_clearance] * (dim - 1))
 
         self.dim = dim
         self.rng = np.random.default_rng()
@@ -62,87 +64,103 @@ class StraightLine(Environment):
         goal_valid = np.all(start >= self.bounds_lower) and np.all(start <= self.bounds_upper)
         return start_valid and goal_valid
 
-    def is_prm_epsilon_delta_complete(self, prm, tol, timeout=60.0):
+    def is_prm_epsilon_delta_complete(self, prm, tol, timeout=60.0, n_samples_per_check=100, vis=False):
         rng = np.random.default_rng()
         conn_r = prm.conn_r
         prm_points_to_cvx_hull = {}
 
         length_tri_points = [(0.0, conn_r), (0.0, 1.0), (1.0 - conn_r, 1.0)]
         length_space_to_cover = Polygon(length_tri_points)
-        p1s = np.array(length_tri_points)
-        p2s = np.roll(p1s, 1)
-        p2s_min_p1s = p2s - p1s
 
         timeout_time = time.process_time() + timeout
 
+        def _find_valid_prm_entry_exit_points(sample_query):
+            # use prm to find the valid queries (with respect to epsilon delta completeness)
+            t_start = sample_query[0]
+            t_goal = sample_query[1]
+            start = self.arclength_to_curve_point(t_start)
+            goal = self.arclength_to_curve_point(t_goal)
+            path_length = t_goal - t_start
+            sols_in_and_outs, sols_distances = prm.query_all_graph_connections(start, goal)
+            valid_pairs = (sols_distances
+                           + np.linalg.norm(start - sols_in_and_outs[:, 0, :], axis=1)
+                           + np.linalg.norm(goal - sols_in_and_outs[:, 1, :], axis=1)) <= path_length * (1 + tol)
+            # store valid queries in some structure that encodes the multiset
+            # compute new convex hulls.
+            return sols_in_and_outs[valid_pairs, :, :]
+
+        # some helpers since we'll be processing lots of points in the same way
+        def _add_to_set_system(query_point, sols_in_and_outs_as_identifiers):
+            for nd_prm_in, nd_prm_out in sols_in_and_outs_as_identifiers:
+                identifier = (Point(nd_prm_in), Point(nd_prm_out))
+
+                try:
+                    prm_points_to_cvx_hull[identifier] = (
+                        prm_points_to_cvx_hull[identifier]
+                        .union(Point(query_point))
+                        .convex_hull
+                    )
+                except KeyError:
+                    prm_points_to_cvx_hull[identifier] = Point(query_point)
+
+        def _process_query(query_point):
+            # returns True if successfully queried, False if the PRM does not support the query with the
+            # the required tolerance
+            query_sol_ios = _find_valid_prm_entry_exit_points(query_point)
+
+            if query_sol_ios.size <= 0:
+                print('not ed complete! failing query: %s' % str(query_point))
+                return False
+
+            _add_to_set_system(query_point, query_sol_ios)
+
+            return True
+
+        # add in the corners of the triangle first, since we project to them with prob zero
+        for tri_point in np.array(length_tri_points):
+            if not _process_query(tri_point):
+                return False
+
         while True:
-            # sample a point query new solutions and add convex sets
-            unit_square_sample = rng.uniform(low=[0.0, 0.0], high=[1.0, 1.0])
-            unit_triangle_sample = np.sort(unit_square_sample)
-            length_space_sample = ((1.0 - conn_r) * (unit_triangle_sample - np.array([0.0, 1.0]))) + np.array(
-                [0.0, 1.0])
+            # NOTE: a doubling scheme may work better?
+            for _ in range(n_samples_per_check):
+                # sample a point query new solutions and add convex sets
+                unit_square_sample = rng.uniform(low=[0.0, 0.0], high=[1.0, 1.0])
+                unit_triangle_sample = np.sort(unit_square_sample)
+                length_space_sample = ((1.0 - conn_r) * (unit_triangle_sample - np.array([0.0, 1.0]))) + np.array(
+                    [0.0, 1.0])
+                if not _process_query(length_space_sample):
+                    return False
 
-            sample_sols_in_and_outs = self._find_valid_prm_entry_exit_points(length_space_sample, prm, tol)
-
-            # if there are no sols, then the prm does _not_ have a valid path.
-            if sample_sols_in_and_outs.size <= 0:
-                return False
-
-            # compute edge projection of the sampled query to an edge and then perform the same query search.
-            # I was lazy and looked up the closed form expression:
-            # https://ocw.mit.edu/ans7870/18/18.013a/textbook/HTML/chapter05/section05.html
-            projection_to_sides = (
-                    np.sum((length_space_sample - p1s) * p2s_min_p1s, axis=1)
-                    * p2s_min_p1s
-                    / np.sum(p2s_min_p1s * p2s_min_p1s, axis=1)
-                    + p1s
-            )
-            proj_dists = np.linalg.norm(projection_to_sides - length_space_sample, axis=1)
-            proj_sample = projection_to_sides[np.argmax(proj_dists)]
-
-            proj_sols_in_and_outs = self._find_valid_prm_entry_exit_points(proj_sample, prm, tol)
-            if proj_sols_in_and_outs.size <= 0:
-                return False
-
-            # add query points to convex set system
-            for query_point, sols_in_and_outs in zip([length_tri_points, proj_sample],
-                                                     [sample_sols_in_and_outs, proj_sols_in_and_outs]):
-                for prm_in, prm_out in sols_in_and_outs:
-                    try:
-                        prm_points_to_cvx_hull[(prm_in, prm_out)].add_points([query_point])
-                    except KeyError:
-                        prm_points_to_cvx_hull[(prm_in, prm_out)] = ConvexHull([query_point], incremental=True)
+                # project the point onto the boundary triangle
+                proj_point, _ = nearest_points(length_space_to_cover.boundary, Point(length_space_sample))
+                proj_sample = np.array(proj_point.coords).flatten()
+                if not _process_query(proj_sample):
+                    return False
 
             # compute new union polygon...  and I think we're forced to use Shapely since CGAL is missing bindings to do
             # the same computations.
             # it appears that shapely also has a covers function... ...
-            convex_sets = map(lambda hull: Polygon(hull.vertices), prm_points_to_cvx_hull.values())
-            ranges = MultiPolygon(convex_sets)
+            ranges = MultiPolygon()
+            for cvx_hull in set(prm_points_to_cvx_hull.values()):
+                if isinstance(cvx_hull, Polygon):
+                    ranges = ranges.union(cvx_hull)
 
             # continue until timeout (where we confirm or deny? decide). or if we're covered return true
             # or if we don't have an admissible solution, return false.
-            if ranges.covers(length_space_to_cover):
-                return True
+            covers = ranges.covers(length_space_to_cover)
+            if covers or time.process_time() > timeout_time:
 
-            if time.process_time() > timeout_time:
-                print('Epsilon-Delta check timed out.')
-                return True
+                if covers:
+                    print('full cover!')
 
-    def _find_valid_prm_entry_exit_points(self, length_space_sample, prm, tol):
-        # use prm to find the valid queries (with respect to epsilon delta completeness)
-        t_start = length_space_sample[0]
-        t_goal = length_space_sample[1]
-        start = self.arclength_to_curve_point(t_start)
-        goal = self.arclength_to_curve_point(t_goal)
-        path_length = t_start - t_goal
-        sols_in_and_outs, sols_distances = prm.query_all_graph_connections(start, goal)
-        valid_pairs = (sols_distances
-                       + np.linalg.norm(start - sols_in_and_outs[0], axis=1)
-                       + np.linalg.norm(goal - sols_in_and_outs[1], axis=1)) <= path_length * (1 + tol)
-        # store valid queries in some structure that encodes the multiset
-        # compute new convex hulls.
-        valid_sols_in_and_outs = np.swapaxes(sols_in_and_outs[:, valid_pairs, :], 0, 1)
-        return valid_sols_in_and_outs
+                if vis:
+                    fig, axs = plt.subplots()
+                    plot_polygon(length_space_to_cover, ax=axs, color='red')
+                    plot_polygon(ranges, ax=axs, color='blue')
+                    plt.show()
+
+                return True
 
 
 class GrayCodeWalls(Environment):

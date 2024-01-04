@@ -130,6 +130,8 @@ class SimplePRM:
     #     return self.g_cc.componentOfNode(v1) == self.g_cc.componentOfNode(v2)
 
     def query_all_graph_connections(self, start, goal):
+        # returns a N_pairs X 2 X dim array consisting of enter/exit points in the prm graph
+        # and an N_pairs vector consisting of the distances between the enter and exit points in the prm
         indices, distances = self.nn_index.query(np.vstack([start, goal]))
 
         start_nns = indices[0, distances[0] < self.conn_r]
