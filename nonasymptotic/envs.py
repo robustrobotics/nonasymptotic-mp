@@ -69,6 +69,10 @@ class StraightLine(Environment):
 
         length_tri_points = [(0.0, conn_r), (0.0, 1.0), (1.0 - conn_r, 1.0)]
         length_space_to_cover = Polygon(length_tri_points)
+        p1s = np.array(length_tri_points)
+        p2s = np.roll(p1s, 1)
+        p2s_min_p1s = p2s - p1s
+
         timeout_time = time.process_time() + timeout
 
         while True:
@@ -87,12 +91,10 @@ class StraightLine(Environment):
             # compute edge projection of the sampled query to an edge and then perform the same query search.
             # I was lazy and looked up the closed form expression:
             # https://ocw.mit.edu/ans7870/18/18.013a/textbook/HTML/chapter05/section05.html
-            p1s = np.array(length_tri_points)
-            p2s = np.roll(p1s, 1)
             projection_to_sides = (
-                    np.sum((length_space_sample - p1s) * (p2s - p1s), axis=1)
-                    * (p2s - p1s)
-                    / np.sum((p2s - p1s, p2s - p1s), axis=1)
+                    np.sum((length_space_sample - p1s) * p2s_min_p1s, axis=1)
+                    * p2s_min_p1s
+                    / np.sum(p2s_min_p1s * p2s_min_p1s, axis=1)
                     + p1s
             )
             proj_dists = np.linalg.norm(projection_to_sides - length_space_sample, axis=1)
