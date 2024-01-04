@@ -135,27 +135,22 @@ class SimplePRM:
         start_nns = indices[0, distances[0] < self.conn_r]
         goal_nns = indices[1, distances[1] < self.conn_r]
 
-        start_nns = filter(lambda n_i: self.check_motion(start, self.samples[n_i]), start_nns)
-        goal_nns = filter(lambda n_i: self.check_motion(goal, self.samples[n_i]), goal_nns)
+        coll_free_start_nns = list(filter(lambda n_i: self.check_motion(start, self.samples[n_i]), start_nns))
+        coll_free_goal_nns = list(filter(lambda n_i: self.check_motion(goal, self.samples[n_i]), goal_nns))
 
         # now we have indices, let's do some shortest path computations
-        spsp = nk.distance.SPSP(self.g_prm, list(start_nns))
-        spsp.setTargets(list(goal_nns))
+        spsp = nk.distance.SPSP(self.g_prm, coll_free_start_nns)
+        spsp.setTargets(coll_free_goal_nns)
         spsp.run()
 
-        prm_sols_in_and_outs = product(start_nns, goal_nns)
-        prm_sols_distances = map(lambda ij: spsp.getDistance(ij[0], ij[1]), prm_sols_in_and_outs)
-
-        # force an evaluation of the datastream
-        prm_sols_in_and_outs = np.array(list(prm_sols_in_and_outs))
-        prm_sols_distances = np.array(list(prm_sols_distances))
-
+        prm_sols_in_and_outs = np.array(list(product(coll_free_start_nns, coll_free_goal_nns)))
+        prm_sols_distances = np.array(list(map(lambda ij: spsp.getDistance(ij[0], ij[1]), prm_sols_in_and_outs)))
         return (
             np.stack([
                 self.samples[prm_sols_in_and_outs[:, 0]],
                 self.samples[prm_sols_in_and_outs[:, 1]]
-            ], axis=0),
-            np.array(list(prm_sols_distances))
+            ], axis=0).swapaxes(0, 1),
+            prm_sols_distances
         )
 
     def num_vertices(self):
