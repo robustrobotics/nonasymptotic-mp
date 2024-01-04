@@ -3,6 +3,7 @@ from shapely import Polygon, MultiPolygon
 from scipy.spatial import ConvexHull
 import networkx as nx
 import numpy as np
+import time
 
 import copy
 from enum import Enum
@@ -22,6 +23,7 @@ class Environment(ABC):
     @abstractmethod
     def is_motion_valid(self, start, goal):
         pass
+
     @abstractmethod
     def is_prm_epsilon_delta_complete(self, prm, tol):
         pass
@@ -60,57 +62,85 @@ class StraightLine(Environment):
         goal_valid = np.all(start >= self.bounds_lower) and np.all(start <= self.bounds_upper)
         return start_valid and goal_valid
 
-    def is_prm_epsilon_delta_complete(self, prm, tol, timeout=5.0):
+    def is_prm_epsilon_delta_complete(self, prm, tol, timeout=60.0):
         rng = np.random.default_rng()
         conn_r = prm.conn_r
         prm_points_to_cvx_hull = {}
 
-        length_space_to_cover = Polygon([(0.0, conn_r), (0.0, 1.0), (1.0 - conn_r, 1.0)])
+        length_tri_points = [(0.0, conn_r), (0.0, 1.0), (1.0 - conn_r, 1.0)]
+        length_space_to_cover = Polygon(length_tri_points)
+        timeout_time = time.process_time() + timeout
 
-        # sample a point
-        unit_square_sample = rng.uniform(low=[0.0, 0.0], high=[1.0, 1.0])
-        unit_triangle_sample = np.sort(unit_square_sample)
-        length_space_sample = ((1.0 - conn_r) * (unit_triangle_sample - np.array([0.0, 1.0]))) + np.array([0.0, 1.0])
+        while True:
+            # sample a point query new solutions and add convex sets
+            unit_square_sample = rng.uniform(low=[0.0, 0.0], high=[1.0, 1.0])
+            unit_triangle_sample = np.sort(unit_square_sample)
+            length_space_sample = ((1.0 - conn_r) * (unit_triangle_sample - np.array([0.0, 1.0]))) + np.array(
+                [0.0, 1.0])
 
+            sample_sols_in_and_outs = self._find_valid_prm_entry_exit_points(length_space_sample, prm, tol)
+
+            # if there are no sols, then the prm does _not_ have a valid path.
+            if sample_sols_in_and_outs.size <= 0:
+                return False
+
+            # compute edge projection of the sampled query to an edge and then perform the same query search.
+            # I was lazy and looked up the closed form expression:
+            # https://ocw.mit.edu/ans7870/18/18.013a/textbook/HTML/chapter05/section05.html
+            p1s = np.array(length_tri_points)
+            p2s = np.roll(p1s, 1)
+            projection_to_sides = (
+                    np.sum((length_space_sample - p1s) * (p2s - p1s), axis=1)
+                    * (p2s - p1s)
+                    / np.sum((p2s - p1s, p2s - p1s), axis=1)
+                    + p1s
+            )
+            proj_dists = np.linalg.norm(projection_to_sides - length_space_sample, axis=1)
+            proj_sample = projection_to_sides[np.argmax(proj_dists)]
+
+            proj_sols_in_and_outs = self._find_valid_prm_entry_exit_points(proj_sample, prm, tol)
+            if proj_sols_in_and_outs.size <= 0:
+                return False
+
+            # add query points to convex set system
+            for query_point, sols_in_and_outs in zip([length_tri_points, proj_sample],
+                                                     [sample_sols_in_and_outs, proj_sols_in_and_outs]):
+                for prm_in, prm_out in sols_in_and_outs:
+                    try:
+                        prm_points_to_cvx_hull[(prm_in, prm_out)].add_points([query_point])
+                    except KeyError:
+                        prm_points_to_cvx_hull[(prm_in, prm_out)] = ConvexHull([query_point], incremental=True)
+
+            # compute new union polygon...  and I think we're forced to use Shapely since CGAL is missing bindings to do
+            # the same computations.
+            # it appears that shapely also has a covers function... ...
+            convex_sets = map(lambda hull: Polygon(hull.vertices), prm_points_to_cvx_hull.values())
+            ranges = MultiPolygon(convex_sets)
+
+            # continue until timeout (where we confirm or deny? decide). or if we're covered return true
+            # or if we don't have an admissible solution, return false.
+            if ranges.covers(length_space_to_cover):
+                return True
+
+            if time.process_time() > timeout_time:
+                print('Epsilon-Delta check timed out.')
+                return True
+
+    def _find_valid_prm_entry_exit_points(self, length_space_sample, prm, tol):
         # use prm to find the valid queries (with respect to epsilon delta completeness)
         t_start = length_space_sample[0]
         t_goal = length_space_sample[1]
         start = self.arclength_to_curve_point(t_start)
         goal = self.arclength_to_curve_point(t_goal)
-
         path_length = t_start - t_goal
-
         sols_in_and_outs, sols_distances = prm.query_all_graph_connections(start, goal)
         valid_pairs = (sols_distances
                        + np.linalg.norm(start - sols_in_and_outs[0], axis=1)
                        + np.linalg.norm(goal - sols_in_and_outs[1], axis=1)) <= path_length * (1 + tol)
-
-        # if there are no valid pairs, then return false (not epsilon delta complete)
-        if not np.any(valid_pairs):
-            return False
-
-        # TODO: add edge projection
-
         # store valid queries in some structure that encodes the multiset
         # compute new convex hulls.
         valid_sols_in_and_outs = np.swapaxes(sols_in_and_outs[:, valid_pairs, :], 0, 1)
-        for prm_in, prm_out in valid_sols_in_and_outs:
-            try:
-                prm_points_to_cvx_hull[(prm_in, prm_out)].add_points([length_space_sample])
-            except KeyError:
-                prm_points_to_cvx_hull[(prm_in, prm_out)] = ConvexHull([length_space_sample], incremental=True)
-
-        # compute new union polygon...  and I think we're forced to use Shapely since CGAL is missing stuff.
-        # it appears that shapely also has a covers function... ...
-        convex_sets = map(lambda hull: Polygon(hull.vertices), prm_points_to_cvx_hull.values())
-        ranges = MultiPolygon(convex_sets)
-
-        # continue until timeout (where we confirm or deny? decide). or if we're covered return true
-        # or if we don't have an admissable solution, return false.
-        if ranges.covers(length_space_to_cover):
-            return True
-
-        # TODO: add in while loop too
+        return valid_sols_in_and_outs
 
 
 class GrayCodeWalls(Environment):
