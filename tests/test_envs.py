@@ -1,4 +1,5 @@
-from nonasymptotic.envs import GrayCodeWalls, MidCuboidRegions, EndCuboidRegions
+from nonasymptotic.envs import GrayCodeWalls, MidCuboidRegions, EndCuboidRegions, StraightLine
+from nonasymptotic.prm import SimplePRM
 
 from sympy.combinatorics.graycode import GrayCode
 import networkx as nx
@@ -519,3 +520,12 @@ class TestGrayCodeEnvMotionValidityChecker:
         assert not self.anti_regression_env.is_motion_valid(start, goal)
 
 
+class TestEpsilonDeltaCompletePropertyTest:
+
+    def test_timeout(self):
+        env = StraightLine(dim=2, delta_clearance=0.5)
+        prm = SimplePRM(0.2, env.is_motion_valid, env.sample_from_env)
+        prm.grow_to_n_samples(10000)
+
+        is_complete = env.is_prm_epsilon_delta_complete(prm, 0.5, n_samples_per_check=100, timeout=600)
+        assert is_complete

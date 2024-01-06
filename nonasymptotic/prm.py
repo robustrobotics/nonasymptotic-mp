@@ -32,7 +32,9 @@ class SimplePRM:
             for i in range(n_samples):
                 self.samples[i, :] = self.sample_state()
 
-            self.nn_index = pynn.NNDescent(self.samples, verbose=True)  # Euclidean metric is default
+            self.nn_index = pynn.NNDescent(self.samples,
+                                           verbose=True,
+                                           n_neighbors=self.k_conn_neighbors)  # Euclidean metric is default
             # TODO: tinker with the NN tree parameters
 
             self.g_prm = nk.Graph(n_samples, weighted=True)

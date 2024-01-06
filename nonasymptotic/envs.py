@@ -6,7 +6,7 @@ from enum import Enum
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
-from shapely import Point, Polygon, MultiPolygon
+from shapely import Point, Polygon, unary_union
 from shapely.ops import nearest_points
 from shapely.plotting import plot_polygon
 from sympy.combinatorics.graycode import GrayCode
@@ -140,12 +140,8 @@ class StraightLine(Environment):
 
             # compute new union polygon...  and I think we're forced to use Shapely since CGAL is missing bindings to do
             # the same computations.
-            # it appears that shapely also has a covers function... ...
-            ranges = MultiPolygon()
-            for cvx_hull in set(prm_points_to_cvx_hull.values()):
-                if isinstance(cvx_hull, Polygon):
-                    ranges = ranges.union(cvx_hull)
 
+            ranges = unary_union(list(prm_points_to_cvx_hull.values()))
             # continue until timeout (where we confirm or deny? decide). or if we're covered return true
             # or if we don't have an admissible solution, return false.
             covers = ranges.covers(length_space_to_cover)
@@ -153,12 +149,16 @@ class StraightLine(Environment):
 
                 if covers:
                     print('full cover!')
+                else:
+                    print('timed out')
 
                 if vis:
                     fig, axs = plt.subplots()
                     plot_polygon(length_space_to_cover, ax=axs, color='red')
                     plot_polygon(ranges, ax=axs, color='blue')
                     plt.show()
+
+                print('covered fraction: %f' % (ranges.area / length_space_to_cover.area))
 
                 return True
 
