@@ -30,6 +30,10 @@ class Environment(ABC):
     def is_prm_epsilon_delta_complete(self, prm, tol):
         pass
 
+    @abstractmethod
+    def distance_to_path(self, query_points):
+        pass
+
 
 class StraightLine(Environment):
     """
@@ -45,6 +49,7 @@ class StraightLine(Environment):
         # will just be delta-tube in the l_infinity norm.
         self.bounds_lower = np.array([-delta_clearance] + [-delta_clearance] * (dim - 1))
         self.bounds_upper = np.array([1.0 + delta_clearance] + [delta_clearance] * (dim - 1))
+        self.line_dir = np.array([1.0] + [0.0] * (dim - 1)).reshape(1, -1)
 
         self.dim = dim
         self.rng = np.random.default_rng()
@@ -63,6 +68,10 @@ class StraightLine(Environment):
         start_valid = np.all(start >= self.bounds_lower) and np.all(start <= self.bounds_upper)
         goal_valid = np.all(start >= self.bounds_lower) and np.all(start <= self.bounds_upper)
         return start_valid and goal_valid
+
+    def distance_to_path(self, points):
+        proj_points_clipped = np.clip(points[:, 0], 0.0, 1.0).reshape(-1, 1)
+        return np.linalg.norm(points - proj_points_clipped * self.line_dir, axis=1)
 
     def is_prm_epsilon_delta_complete(self, prm, tol, timeout=60.0, n_samples_per_check=100, vis=False):
         rng = np.random.default_rng()
@@ -451,6 +460,8 @@ class GrayCodeWalls(Environment):
     def is_prm_epsilon_delta_complete(self, prm, tol):
         raise NotImplementedError('Not done yet!')
 
+    def distance_to_path(self, queries):
+        raise NotImplementedError('Not done yet!')
     def _transform_sample_to_global_frame(self, unit_sample, cuboid_coords, region):
 
         if region == EndCuboidRegions.CENTER or region == MidCuboidRegions.CENTER:
