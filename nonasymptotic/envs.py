@@ -87,10 +87,10 @@ class StraightLine(Environment):
                            + np.linalg.norm(goal - sols_in_and_outs[:, 1, :], axis=1)) <= path_length * (1 + tol)
             # store valid queries in some structure that encodes the multiset
             # compute new convex hulls.
-            return sols_in_and_outs[valid_pairs, :, :]
+            return sols_in_and_outs[valid_pairs, :, :], sols_distances[valid_pairs]
 
         # some helpers since we'll be processing lots of points in the same way
-        def _add_to_set_system(query_point, sols_in_and_outs_as_identifiers):
+        def _add_to_set_system_using_convexity_only(query_point, sols_in_and_outs_as_identifiers):
             for nd_prm_in, nd_prm_out in sols_in_and_outs_as_identifiers:
                 identifier = (Point(nd_prm_in), Point(nd_prm_out))
 
@@ -103,16 +103,76 @@ class StraightLine(Environment):
                 except KeyError:
                     prm_points_to_cvx_hull[identifier] = Point(query_point)
 
+        # some pre-processing for the next set adding helper (common computation)
+        # this will define a long enough shadow that gives the effect of an open half-plane when
+        # taken with the intersection
+        ray_slope1 = np.array([tol, 2 + tol])
+        ray_slope1 *= 2 / np.linalg.norm(ray_slope1)
+
+        ray_slope2 = np.array([2 + tol, tol])
+        ray_slope2 *= 2 / np.linalg.norm(ray_slope2)
+
+        def _add_to_set_system_with_ray_shooting(query_point, sols_in_and_outs_as_identifiers, sol_dists):
+            for (nd_prm_in, nd_prm_out), prm_dist in zip(sols_in_and_outs_as_identifiers, sol_dists):
+                identifier = (Point(nd_prm_in), Point(nd_prm_out))
+                u_1, u_2 = nd_prm_in[0], np.linalg.norm(nd_prm_in[1:])
+                v_1, v_2 = nd_prm_out[0], np.linalg.norm(nd_prm_out[1:])
+
+                # compute radius bounding box
+                t_1_low = u_1 - np.sqrt(conn_r ** 2 - u_2 ** 2)
+                t_1_high = u_1 + np.sqrt(conn_r ** 2 - u_2 ** 2)
+
+                t_2_low = v_1 - np.sqrt(conn_r ** 2 - v_2 ** 2)
+                t_2_high = v_1 + np.sqrt(conn_r ** 2 - v_2 ** 2)
+                conn_r_bounding_box = Polygon([(t_1_low, t_2_low),
+                                               (t_1_high, t_2_low),
+                                               (t_1_high, t_2_high),
+                                               (t_1_low, t_2_high)])
+
+                # the query point + its shadow
+                query_shadow = Polygon([query_point,
+                                        query_point + ray_slope1,
+                                        query_point + ray_slope2])
+
+                try:
+                    # take in union of query shadow and then clip off the bounding box defined by conn_r
+                    prm_points_to_cvx_hull[identifier] = (
+                        prm_points_to_cvx_hull[identifier]
+                        .union(query_shadow)
+                        .intersection(conn_r_bounding_box)
+                    ).convex_hull
+
+                except KeyError:
+                    # in this situation, to get as much bang for buck as possible, we can
+                    # take the L_1 inner approximation
+
+                    inner_approx_p1 = np.array([u_1, (prm_dist - u_1 - v_1 + u_2 + v_2 + (2 + tol) * u_1) / tol])
+                    inner_approx_ray_p1 = inner_approx_p1 + ray_slope1
+
+                    inner_approx_p2 = np.array([(prm_dist + u_1 + v_1 + u_2 + v_2 - (2 + tol) * v_2) / -tol, v_2])
+                    inner_approx_ray_p2 = inner_approx_p2 + ray_slope2
+
+                    inner_approx_open = Polygon([inner_approx_ray_p1,
+                                                 inner_approx_p1,
+                                                 inner_approx_p2,
+                                                 inner_approx_ray_p2])
+
+                    prm_points_to_cvx_hull[identifier] = (
+                        inner_approx_open
+                        .union(query_shadow)
+                        .intersection(conn_r_bounding_box)
+                    ).convex_hull
+
         def _process_query(query_point):
             # returns True if successfully queried, False if the PRM does not support the query with the
             # the required tolerance
-            query_sol_ios = _find_valid_prm_entry_exit_points(query_point)
+            query_sol_ios, query_sol_dists = _find_valid_prm_entry_exit_points(query_point)
 
             if query_sol_ios.size <= 0:
                 print('not ed complete! failing query: %s' % str(query_point))
                 return False
 
-            _add_to_set_system(query_point, query_sol_ios)
+            _add_to_set_system_with_ray_shooting(query_point, query_sol_ios, query_sol_dists)
 
             return True
 
