@@ -6,9 +6,9 @@ from enum import Enum
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
-from shapely import Point, Polygon, unary_union
+from shapely import Point, Polygon, unary_union, LineString, MultiPolygon
 from shapely.ops import nearest_points
-from shapely.plotting import plot_polygon
+from shapely.plotting import plot_polygon, plot_points, plot_line
 from sympy.combinatorics.graycode import GrayCode
 
 
@@ -115,10 +115,10 @@ class StraightLine(Environment):
         # some pre-processing for the next set adding helper (common computation)
         # this will define a long enough shadow that gives the effect of an open half-plane when
         # taken with the intersection
-        ray_slope1 = np.array([tol, 2 + tol])
-        ray_slope1 *= 2 / np.linalg.norm(ray_slope1)
+        ray_slope1 = -np.array([2 + tol, tol])
+        ray_slope1 *= 0.02 / np.linalg.norm(ray_slope1)
 
-        ray_slope2 = np.array([2 + tol, tol])
+        ray_slope2 = np.array([tol, 2 + tol])
         ray_slope2 *= 2 / np.linalg.norm(ray_slope2)
 
         def _add_to_set_system_with_ray_shooting(query_point, sols_in_and_outs_as_identifiers, sol_dists):
@@ -155,22 +155,42 @@ class StraightLine(Environment):
                     # in this situation, to get as much bang for buck as possible, we can
                     # take the L_1 inner approximation
 
-                    inner_approx_p1 = np.array([u_1, (prm_dist - u_1 - v_1 + u_2 + v_2 + (2 + tol) * u_1) / tol])
-                    inner_approx_ray_p1 = inner_approx_p1 + ray_slope1
+                    inner_approx_p1 = np.array([u_1,
+                                                (prm_dist + u_1 + v_1 + u_2 + v_2 + tol * u_1) / (2 + tol)])
+                    inner_approx_p2 = np.array([(prm_dist - u_1 - v_1 + u_2 + v_2 - tol * v_1) / -(2 + tol),
+                                                v_1])
 
-                    inner_approx_p2 = np.array([(prm_dist + u_1 + v_1 + u_2 + v_2 - (2 + tol) * v_2) / -tol, v_2])
-                    inner_approx_ray_p2 = inner_approx_p2 + ray_slope2
+                    # the ray we add depends on arrangement of approx_p1 and approx_p2
+                    not_flip_rays = inner_approx_p1[1] < v_1
+                    inner_approx_ray_p1, inner_approx_ray_p2 = (inner_approx_p1 + ray_slope1,
+                                                                inner_approx_p2 + ray_slope2) \
+                        if not_flip_rays else (inner_approx_p1 + ray_slope2,
+                                               inner_approx_p2 + ray_slope1)
 
-                    inner_approx_open = Polygon([inner_approx_ray_p1,
-                                                 inner_approx_p1,
-                                                 inner_approx_p2,
-                                                 inner_approx_ray_p2])
+                    inner_approx_open = LineString([inner_approx_ray_p1,
+                                                    inner_approx_p1,
+                                                    inner_approx_p2,
+                                                    inner_approx_ray_p2])
+                    plt.figure()
+                    fig, ax = plt.subplots()
+                    plot_line(inner_approx_open, ax)
+                    plot_polygon(query_shadow, ax)
+                    plot_polygon(length_space_to_cover, ax, color='red')
+                    plt.show()
+
+                    plt.figure()
+                    fig, ax = plt.subplots()
+                    plot_line(inner_approx_open, ax)
+                    plot_polygon(query_shadow, ax)
+                    plt.show()
 
                     prm_points_to_cvx_hull[identifier] = (
                         inner_approx_open
                         .union(query_shadow)
                         .intersection(conn_r_bounding_box)
                     ).convex_hull
+
+                    print('hi')
 
         def _process_query(query_point):
             # returns True if successfully queried, False if the PRM does not support the query with the
@@ -207,7 +227,7 @@ class StraightLine(Environment):
                 if not _process_query(proj_sample):
                     return False
 
-            # compute new union polygon...  and I think we're forced to use Shapely since CGAL is missing bindings to do
+            # compute new union polygon... we're forced to use Shapely since CGAL is missing bindings to do
             # the same computations.
 
             ranges = unary_union(list(prm_points_to_cvx_hull.values()))
@@ -462,6 +482,7 @@ class GrayCodeWalls(Environment):
 
     def distance_to_path(self, queries):
         raise NotImplementedError('Not done yet!')
+
     def _transform_sample_to_global_frame(self, unit_sample, cuboid_coords, region):
 
         if region == EndCuboidRegions.CENTER or region == MidCuboidRegions.CENTER:

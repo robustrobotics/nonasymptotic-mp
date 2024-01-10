@@ -102,6 +102,9 @@ class SimplePRM:
         spsp.run()
         self.g_sp_lookup = spsp.getDistances(asarray=True)
         self.sample_to_lookup_ind = np.zeros(n_samples, dtype=np.intp)
+
+        # we set to the n_samples to throw an error if query for a vertex outside the conn_r
+        self.sample_to_lookup_ind[:] = n_samples
         self.sample_to_lookup_ind[samples_within_conn_r] = np.arange(samples_within_conn_r.shape[0])
 
         # self.g_spsp = spsp
