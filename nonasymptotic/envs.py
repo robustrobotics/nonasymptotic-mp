@@ -116,7 +116,7 @@ class StraightLine(Environment):
         # this will define a long enough shadow that gives the effect of an open half-plane when
         # taken with the intersection
         ray_slope1 = -np.array([2 + tol, tol])
-        ray_slope1 *= 0.02 / np.linalg.norm(ray_slope1)
+        ray_slope1 *= 2 / np.linalg.norm(ray_slope1)
 
         ray_slope2 = np.array([tol, 2 + tol])
         ray_slope2 *= 2 / np.linalg.norm(ray_slope2)
@@ -167,22 +167,10 @@ class StraightLine(Environment):
                         if not_flip_rays else (inner_approx_p1 + ray_slope2,
                                                inner_approx_p2 + ray_slope1)
 
-                    inner_approx_open = LineString([inner_approx_ray_p1,
-                                                    inner_approx_p1,
-                                                    inner_approx_p2,
-                                                    inner_approx_ray_p2])
-                    plt.figure()
-                    fig, ax = plt.subplots()
-                    plot_line(inner_approx_open, ax)
-                    plot_polygon(query_shadow, ax)
-                    plot_polygon(length_space_to_cover, ax, color='red')
-                    plt.show()
-
-                    plt.figure()
-                    fig, ax = plt.subplots()
-                    plot_line(inner_approx_open, ax)
-                    plot_polygon(query_shadow, ax)
-                    plt.show()
+                    inner_approx_open = Polygon([inner_approx_ray_p1,
+                                                 inner_approx_p1,
+                                                 inner_approx_p2,
+                                                 inner_approx_ray_p2])
 
                     prm_points_to_cvx_hull[identifier] = (
                         inner_approx_open
@@ -190,7 +178,22 @@ class StraightLine(Environment):
                         .intersection(conn_r_bounding_box)
                     ).convex_hull
 
-                    print('hi')
+                    # plt.figure()
+                    # fig, ax = plt.subplots()
+                    # plot_polygon(prm_points_to_cvx_hull[identifier], ax)
+                    # plot_polygon(conn_r_bounding_box, ax, color='green')
+                    # plot_polygon(query_shadow.intersection(conn_r_bounding_box), color='orange')
+                    # plot_polygon(inner_approx_open.intersection(conn_r_bounding_box), color='purple')
+                    # plot_polygon(length_space_to_cover, ax, color='red')
+                    # plt.show()
+                    #
+                    # plt.figure()
+                    # fig, ax = plt.subplots()
+                    # plot_polygon(prm_points_to_cvx_hull[identifier], ax)
+                    # plot_polygon(conn_r_bounding_box, ax, color='green')
+                    # plot_polygon(query_shadow.intersection(conn_r_bounding_box), color='orange')
+                    # plot_polygon(inner_approx_open.intersection(conn_r_bounding_box), color='purple')
+                    # plt.show()
 
         def _process_query(query_point):
             # returns True if successfully queried, False if the PRM does not support the query with the
@@ -247,7 +250,7 @@ class StraightLine(Environment):
                     plot_polygon(ranges, ax=axs, color='blue')
                     plt.show()
 
-                print('covered fraction: %f' % (ranges.area / length_space_to_cover.area))
+                print('covered fraction: %f' % (ranges.intersection(length_space_to_cover).area / length_space_to_cover.area))
 
                 return True
 
