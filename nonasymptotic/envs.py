@@ -14,6 +14,9 @@ from sympy.combinatorics.graycode import GrayCode
 
 class Environment(ABC):
 
+    def __init__(self, seed):
+        self.rng = np.random.default_rng(seed)
+
     @abstractmethod
     def sample_from_env(self):
         pass
@@ -41,7 +44,8 @@ class StraightLine(Environment):
     the given delta_clearance.
     """
 
-    def __init__(self, dim, delta_clearance):
+    def __init__(self, dim, delta_clearance, seed=None):
+        super().__init__(seed)
         assert dim >= 2
         assert delta_clearance >= 0
 
@@ -52,7 +56,6 @@ class StraightLine(Environment):
         self.line_dir = np.array([1.0] + [0.0] * (dim - 1)).reshape(1, -1)
 
         self.dim = dim
-        self.rng = np.random.default_rng()
 
     def sample_from_env(self):
         return self.rng.uniform(self.bounds_lower, self.bounds_upper)
@@ -74,7 +77,6 @@ class StraightLine(Environment):
         return np.linalg.norm(points - proj_points_clipped * self.line_dir, axis=1)
 
     def is_prm_epsilon_delta_complete(self, prm, tol, timeout=60.0, n_samples_per_check=100, vis=False):
-        rng = np.random.default_rng()
         conn_r = prm.conn_r
         prm_points_to_cvx_hull = {}
 
@@ -161,11 +163,11 @@ class StraightLine(Environment):
                                                 v_1])
 
                     # the ray we add depends on arrangement of approx_p1 and approx_p2
-                    not_flip_rays = inner_approx_p1[1] < v_1
+                    inner_not_flip_rays = inner_approx_p1[1] < v_1
                     inner_approx_ray_p1, inner_approx_ray_p2 = (inner_approx_p1 + ray_slope1,
                                                                 inner_approx_p2 + ray_slope2) \
-                        if not_flip_rays else (inner_approx_p1 + ray_slope2,
-                                               inner_approx_p2 + ray_slope1)
+                        if inner_not_flip_rays else (inner_approx_p1 + ray_slope2,
+                                                     inner_approx_p2 + ray_slope1)
 
                     inner_approx_open = Polygon([inner_approx_ray_p1,
                                                  inner_approx_p1,
@@ -178,12 +180,27 @@ class StraightLine(Environment):
                         .intersection(conn_r_bounding_box)
                     ).convex_hull
 
+                    # outer_approx_p1 = np.array([u_1,
+                    #                             (prm_dist + u_1 + v_1 + tol * u_1) / (2 + tol)])
+                    # outer_approx_p2 = np.array([(prm_dist - u_1 - v_1 - tol * v_1) / -(2 + tol),
+                    #                             v_1])
+                    # outer_not_flip_rays = outer_approx_p1[1] < v_1
+                    # outer_approx_ray_p1, outer_approx_ray_p2 = (outer_approx_p1 + ray_slope1,
+                    #                                             outer_approx_p2 + ray_slope2) \
+                    #     if outer_not_flip_rays else (outer_approx_p1 + ray_slope2,
+                    #                                  outer_approx_p2 + ray_slope1)
+                    # outer_approx_open = LineString([outer_approx_ray_p1,
+                    #                                 outer_approx_p1,
+                    #                                 outer_approx_p2,
+                    #                                 outer_approx_ray_p2])
+
                     # plt.figure()
                     # fig, ax = plt.subplots()
                     # plot_polygon(prm_points_to_cvx_hull[identifier], ax)
                     # plot_polygon(conn_r_bounding_box, ax, color='green')
                     # plot_polygon(query_shadow.intersection(conn_r_bounding_box), color='orange')
                     # plot_polygon(inner_approx_open.intersection(conn_r_bounding_box), color='purple')
+                    # plot_line(outer_approx_open.intersection(conn_r_bounding_box), color='brown')
                     # plot_polygon(length_space_to_cover, ax, color='red')
                     # plt.show()
                     #
@@ -193,7 +210,9 @@ class StraightLine(Environment):
                     # plot_polygon(conn_r_bounding_box, ax, color='green')
                     # plot_polygon(query_shadow.intersection(conn_r_bounding_box), color='orange')
                     # plot_polygon(inner_approx_open.intersection(conn_r_bounding_box), color='purple')
+                    # plot_line(outer_approx_open.intersection(conn_r_bounding_box), color='brown')
                     # plt.show()
+                    # print('break!')
 
         def _process_query(query_point):
             # returns True if successfully queried, False if the PRM does not support the query with the
@@ -217,7 +236,7 @@ class StraightLine(Environment):
             # NOTE: a doubling scheme may work better?
             for _ in range(n_samples_per_check):
                 # sample a point query new solutions and add convex sets
-                unit_square_sample = rng.uniform(low=[0.0, 0.0], high=[1.0, 1.0])
+                unit_square_sample = self.rng.uniform(low=[0.0, 0.0], high=[1.0, 1.0])
                 unit_triangle_sample = np.sort(unit_square_sample)
                 length_space_sample = ((1.0 - conn_r) * (unit_triangle_sample - np.array([0.0, 1.0]))) + np.array(
                     [0.0, 1.0])
@@ -250,13 +269,15 @@ class StraightLine(Environment):
                     plot_polygon(ranges, ax=axs, color='blue')
                     plt.show()
 
-                print('covered fraction: %f' % (ranges.intersection(length_space_to_cover).area / length_space_to_cover.area))
+                print('covered fraction: %f' % (
+                        ranges.intersection(length_space_to_cover).area / length_space_to_cover.area))
 
                 return True
 
 
 class GrayCodeWalls(Environment):
-    def __init__(self, dim, length, thickness=0.0):
+    def __init__(self, dim, length, thickness=0.0, seed=None):
+        super().__init__(seed)
         assert dim >= 2
         assert length > 0
 
@@ -297,8 +318,6 @@ class GrayCodeWalls(Environment):
 
         self.n_nodes = len(self.no_walls_linear_list)
         total_volume = (self.n_nodes - 2) * vol_mid_passage + 2 * vol_end_passage
-
-        self.rng = np.random.default_rng()
 
         # probability a sample falls in an end passage/mid passage
         prob_end_passage = vol_end_passage / total_volume  # this is the probability of one _specific_ end passage

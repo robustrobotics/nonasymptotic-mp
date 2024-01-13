@@ -26,6 +26,11 @@ class SimplePRM:
         self.g_sp_lookup = None
         self.sample_to_lookup_ind = None
 
+        self.rng_seed = seed
+        self.verbose = verbose
+
+        self.GT = GraphTools()
+
     def grow_to_n_samples(self, n_samples):
         batch_size = 64
 
