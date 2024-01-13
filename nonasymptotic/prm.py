@@ -8,9 +8,6 @@ import networkit as nk
 import networkx as nx
 
 
-# TODO: saving a file may be faster... if slow, see what happens
-
-
 class SimplePRM:
     def __init__(self, connection_rad, motion_validity_checker, valid_state_sampler, sdf_to_path,
                  max_k_connection_neighbors=2048, seed=None, verbose=False):
@@ -47,24 +44,23 @@ class SimplePRM:
                                           n_neighbors=self.k_neighbors,
                                           random_state=self.rng_seed,
                                           verbose=self.verbose)  # Euclidean metric is default
-                _, index_dists = self.nn_index.neighbor_graph
+                _, index_dists = nn_index.neighbor_graph
 
                 if self.k_neighbors >= self.max_k_neighbors or np.all(index_dists[:, -1] >= self.conn_r):
                     if self.verbose:
                         print('Using %i neighbors for graph.' % self.k_neighbors)
-                    break
+                    return nn_index
 
                 self.k_neighbors *= 2
 
-            return nn_index
-
         def _nn_edge_list_and_dist_list_to_nk_prm_graph(_edge_arr, _dist_arr, start_ind=0):
+            # TODO: saving a file may be faster... if slow, see what happens
             rows = np.arange(start_ind, n_samples).repeat(self.k_neighbors)
             cols = _edge_arr[start_ind:, :].flatten(order='C')
             data = _dist_arr[start_ind:, :].flatten(order='C')
 
             # check valid motions and connectivity
-            valid_motions = self.check_motion(self.samples[rows], self.samples[cols]) and (data <= self.conn_r)
+            valid_motions = self.check_motion(self.samples[rows], self.samples[cols]) & (data <= self.conn_r)
 
             # then filter for valid connections and construct graph
             gx = nx.from_scipy_sparse_array(

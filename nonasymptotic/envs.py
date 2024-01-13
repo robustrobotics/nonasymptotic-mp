@@ -73,11 +73,11 @@ class StraightLine(Environment):
         if start.ndim == 1:
             start_valid = np.all(start >= self.bounds_lower) and np.all(start <= self.bounds_upper)
             goal_valid = np.all(goal >= self.bounds_lower) and np.all(goal <= self.bounds_upper)
+            return start_valid and goal_valid
         else:
-            start_valid = np.all(start >= self.bounds_lower, axis=1) and np.all(start <= self.bounds_upper, axis=1)
-            goal_valid = np.all(goal >= self.bounds_lower, axis=1) and np.all(goal <= self.bounds_upper, axis=1)
-
-        return start_valid and goal_valid
+            start_valid = np.all(start >= self.bounds_lower, axis=1) & np.all(start <= self.bounds_upper, axis=1)
+            goal_valid = np.all(goal >= self.bounds_lower, axis=1) & np.all(goal <= self.bounds_upper, axis=1)
+            return start_valid & goal_valid
 
     def distance_to_path(self, points):
         proj_points_clipped = np.clip(points[:, 0], 0.0, 1.0).reshape(-1, 1)
