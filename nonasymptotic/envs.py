@@ -67,9 +67,16 @@ class StraightLine(Environment):
         return point_on_curve
 
     def is_motion_valid(self, start, goal):
+        assert start.shape == goal.shape
+
         # take advantage of fact that shape is convex
-        start_valid = np.all(start >= self.bounds_lower) and np.all(start <= self.bounds_upper)
-        goal_valid = np.all(start >= self.bounds_lower) and np.all(start <= self.bounds_upper)
+        if start.ndim == 1:
+            start_valid = np.all(start >= self.bounds_lower) and np.all(start <= self.bounds_upper)
+            goal_valid = np.all(goal >= self.bounds_lower) and np.all(goal <= self.bounds_upper)
+        else:
+            start_valid = np.all(start >= self.bounds_lower, axis=1) and np.all(start <= self.bounds_upper, axis=1)
+            goal_valid = np.all(goal >= self.bounds_lower, axis=1) and np.all(goal <= self.bounds_upper, axis=1)
+
         return start_valid and goal_valid
 
     def distance_to_path(self, points):
@@ -452,6 +459,9 @@ class GrayCodeWalls(Environment):
     def is_motion_valid(self, start, goal):
         # we're doing this as an exact computation, so then we can have exact experiment results.
         # this will also save computational power in the long run.
+
+        # NOTE: currently not vectorized to optimize compute
+        assert start.ndim == 1 and goal.ndim == 1
 
         start_cube = np.floor(start).astype('int64')
         goal_cube = np.floor(goal).astype('int64')

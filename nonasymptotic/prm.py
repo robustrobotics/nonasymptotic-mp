@@ -1,18 +1,24 @@
+from scipy import sparse
+from networkit.graphtools import GraphTools
+from itertools import product
+
 import numpy as np
 import pynndescent as pynn
 import networkit as nk
+import networkx as nx
 
-from itertools import product
+
+# TODO: saving a file may be faster... if slow, see what happens
 
 
-# TODO: easy speedup: add to graph in bulk
 class SimplePRM:
     def __init__(self, connection_rad, motion_validity_checker, valid_state_sampler, sdf_to_path,
-                 k_connection_neighbors=30):
+                 max_k_connection_neighbors=2048, seed=None, verbose=False):
         self.d = valid_state_sampler().size  # dummy sample to compute dimension
 
         self.conn_r = connection_rad
-        self.k_conn_neighbors = k_connection_neighbors
+        self.k_neighbors = 16
+        self.max_k_neighbors = max_k_connection_neighbors
 
         self.check_motion = motion_validity_checker
         self.sample_state = valid_state_sampler
@@ -32,7 +38,43 @@ class SimplePRM:
         self.GT = GraphTools()
 
     def grow_to_n_samples(self, n_samples):
-        batch_size = 64
+        # batch_size = 64
+
+        def _build_threshold_index(samples):
+            # TODO: tinker with the NN tree parameters
+            while True:
+                nn_index = pynn.NNDescent(samples,
+                                          n_neighbors=self.k_neighbors,
+                                          random_state=self.rng_seed,
+                                          verbose=self.verbose)  # Euclidean metric is default
+                _, index_dists = self.nn_index.neighbor_graph
+
+                if self.k_neighbors >= self.max_k_neighbors or np.all(index_dists[:, -1] >= self.conn_r):
+                    if self.verbose:
+                        print('Using %i neighbors for graph.' % self.k_neighbors)
+                    break
+
+                self.k_neighbors *= 2
+
+            return nn_index
+
+        def _nn_edge_list_and_dist_list_to_nk_prm_graph(_edge_arr, _dist_arr, start_ind=0):
+            rows = np.arange(start_ind, n_samples).repeat(self.k_neighbors)
+            cols = _edge_arr[start_ind:, :].flatten(order='C')
+            data = _dist_arr[start_ind:, :].flatten(order='C')
+
+            # check valid motions and connectivity
+            valid_motions = self.check_motion(self.samples[rows], self.samples[cols]) and (data <= self.conn_r)
+
+            # then filter for valid connections and construct graph
+            gx = nx.from_scipy_sparse_array(
+                sparse.coo_array(
+                    (data[valid_motions], (rows[valid_motions], cols[valid_motions])),
+                    shape=(n_samples, n_samples)
+                ),
+                edge_attribute='distance'
+            )
+            return nk.nxadapter.nx2nk(gx, weightAttr='distance')
 
         # sample new states
         if self.samples is None:  # if new, initialize everything
@@ -41,28 +83,28 @@ class SimplePRM:
             for i in range(n_samples):
                 self.samples[i, :] = self.sample_state()
 
-            self.nn_index = pynn.NNDescent(self.samples,
-                                           verbose=True,
-                                           n_neighbors=self.k_conn_neighbors)  # Euclidean metric is default
-            # TODO: tinker with the NN tree parameters
+            # apply a doubling scheme for connection neighbors to obtain the threshold graph
+            self.nn_index = _build_threshold_index(self.samples)
+            adj_arr, dists_arr = self.nn_index.neighbor_graph
+            self.g_prm = _nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr)
 
-            self.g_prm = nk.Graph(n_samples, weighted=True)
-
-            for i_batch in range(0, n_samples, batch_size):
-                query_node_batch = self.samples[i_batch:i_batch + batch_size]
-                indices, distances = self.nn_index.query(query_node_batch)
-
-                for i_node in range(indices.shape[0]):
-                    node_i = query_node_batch[i_node]
-
-                    for j_neighbor, d_ij in zip(indices[i_node], distances[i_node]):
-                        neighbor_j = self.samples[j_neighbor]
-
-                        if self.check_motion(node_i, neighbor_j):
-
-                            if d_ij < self.conn_r:
-                                self.g_prm.addEdge(i_batch + i_node, j_neighbor,
-                                                   w=d_ij, checkMultiEdge=True)
+            # self.g_prm = nk.Graph(n_samples, weighted=True)
+            #
+            # for i_batch in range(0, n_samples, batch_size):
+            #     query_node_batch = self.samples[i_batch:i_batch + batch_size]
+            #     indices, distances = self.nn_index.query(query_node_batch)
+            #
+            #     for i_node in range(indices.shape[0]):
+            #         node_i = query_node_batch[i_node]
+            #
+            #         for j_neighbor, d_ij in zip(indices[i_node], distances[i_node]):
+            #             neighbor_j = self.samples[j_neighbor]
+            #
+            #             if self.check_motion(node_i, neighbor_j):
+            #
+            #                 if d_ij < self.conn_r:
+            #                     self.g_prm.addEdge(i_batch + i_node, j_neighbor,
+            #                                        w=d_ij, checkMultiEdge=True)
 
         else:  # otherwise, we reuse past computation
             past_n_samples = self.samples.shape[0]
@@ -75,27 +117,36 @@ class SimplePRM:
             self.nn_index.update(xs_fresh=new_samples)
             self.samples = np.concatenate([self.samples, new_samples])
 
-            self.g_prm.addNodes(m_new_samples)
+            # check to make sure we are still within threshold. if not, we need to build a new graph with
+            # new neighbors
+            adj_arr, dists_arr = self.nn_index.neighbor_graph
+            if np.all(dists_arr[:, -1] > self.conn_r):
+                self.g_prm.addNodes(m_new_samples)
+                g_new_conns = _nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr, start_ind=past_n_samples)
+                self.GT.merge(self.g_prm, g_new_conns)
 
-            # TODO: if this is a big problem, a good amount of computation hangs here.
-            # There is probably a trick of exporting to some graph visualization format
-            # that will allow us to offload most of the graph loading to some cpp code.
-            for i_batch in range(0, m_new_samples, batch_size):
-                query_node_batch = self.samples[i_batch:i_batch + batch_size]
-                indices, distances = self.nn_index.query(query_node_batch)
+                # # that will allow us to offload most of the graph loading to some cpp code.
+                # for i_batch in range(0, m_new_samples, batch_size):
+                #     query_node_batch = self.samples[i_batch:i_batch + batch_size]
+                #     indices, distances = self.nn_index.query(query_node_batch)
+                #
+                #     for i_node in range(indices.shape[0]):
+                #         node_i = query_node_batch[i_node]
+                #
+                #         for j_neighbor, d_ij in zip(indices[i_node], distances[i_node]):
+                #             neighbor_j = self.samples[j_neighbor]
+                #
+                #             if self.check_motion(node_i, neighbor_j):
+                #                 d_ij = distances[i_node, j_neighbor]
+                #
+                #                 if d_ij < self.conn_r:
+                #                     self.g_prm.addEdge(m_new_samples + i_batch + i_node, j_neighbor,
+                #                                        w=d_ij, checkMultiEdge=True)
 
-                for i_node in range(indices.shape[0]):
-                    node_i = query_node_batch[i_node]
-
-                    for j_neighbor, d_ij in zip(indices[i_node], distances[i_node]):
-                        neighbor_j = self.samples[j_neighbor]
-
-                        if self.check_motion(node_i, neighbor_j):
-                            d_ij = distances[i_node, j_neighbor]
-
-                            if d_ij < self.conn_r:
-                                self.g_prm.addEdge(m_new_samples + i_batch + i_node, j_neighbor,
-                                                   w=d_ij, checkMultiEdge=True)
+            else:
+                self.nn_index = _build_threshold_index(self.samples)
+                adj_arr, dists_arr = self.nn_index.neighbor_graph
+                self.g_prm = _nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr)
 
         self.g_cc = nk.components.ConnectedComponents(self.g_prm)
         self.g_cc.run()
