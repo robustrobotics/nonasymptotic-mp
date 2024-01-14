@@ -163,12 +163,6 @@ class SimplePRM:
 
         return sol_dist, sol_path
 
-    # def query_same_component(self, v1, v2):
-    #     if not self.g_prm.hasNode(v1) or not self.g_prm.hasNode(v2):
-    #         raise RuntimeError('v1 or v2 not in the PRM.')
-    #
-    #     return self.g_cc.componentOfNode(v1) == self.g_cc.componentOfNode(v2)
-
     def query_all_graph_connections(self, start, goal):
 
         # returns a N_pairs X 2 X dim array consisting of enter/exit points in the prm graph
@@ -178,20 +172,26 @@ class SimplePRM:
         start_nns = indices[0, distances[0] < self.conn_r]
         goal_nns = indices[1, distances[1] < self.conn_r]
 
-        coll_free_start_nns = list(filter(lambda n_i: self.check_motion(start, self.samples[n_i]), start_nns))
-        coll_free_goal_nns = list(filter(lambda n_i: self.check_motion(goal, self.samples[n_i]), goal_nns))
+        coll_free_start_nns = start_nns[
+            self.check_motion(
+                np.tile(start, (start_nns.shape[0], 1)),
+                start_nns
+            )
+        ]
 
-        # now we have indices, let's do some shortest path computations
-        # using explicit distance call:
-        # prm_sols_in_and_outs = np.array(list(product(coll_free_start_nns, coll_free_goal_nns)))
-        # prm_sols_distances = np.array(list(
-        #     map(lambda ij: self.g_sp_lookup.getDistance(ij[0], ij[1]), prm_sols_in_and_outs)
-        # ))
+        coll_free_goal_nns = goal_nns[
+            self.check_motion(
+                np.tile(goal, (goal_nns.shape[0], 1)),
+                goal_nns
+            )
+        ]
 
         # use advanced indexing
         prm_sols_in_and_outs = np.transpose([
-            np.tile(start_nns, len(goal_nns)), np.repeat(goal_nns, len(start_nns))
+            np.tile(coll_free_start_nns, len(coll_free_goal_nns)),
+            np.repeat(coll_free_goal_nns, len(coll_free_start_nns))
         ])
+
         prm_sols_distances = self.g_sp_lookup[
             self.sample_to_lookup_ind[prm_sols_in_and_outs[:, 0]],
             self.sample_to_lookup_ind[prm_sols_in_and_outs[:, 1]]
@@ -218,10 +218,16 @@ class SimplePRM:
         self.nn_index = None
 
     def save(self, filepath):
+        """
+        :param filepath: file directory (without extension, since multiple files need to be saved)
+        """
         if self.g_prm is not None:
-            nk.writeGraph(self.g_prm, filepath, nk.Format.NetworkitBinary)
+            nk.writeGraph(self.g_prm, filepath + '.nkb', nk.Format.NetworkitBinary)
         else:
             raise RuntimeWarning('Tried to save an uninitialized PRM.')
+
+        if self.samples is not None:
+            np.save(filepath + '.npy', self.samples)
 
 
 if __name__ == '__main__':
