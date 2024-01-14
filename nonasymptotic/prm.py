@@ -34,7 +34,6 @@ class SimplePRM:
         self.GT = GraphTools()
 
     def grow_to_n_samples(self, n_samples):
-        # batch_size = 64
 
         def _build_threshold_index(samples):
             while True:
@@ -63,7 +62,8 @@ class SimplePRM:
             # check valid motions and connectivity
             valid_motions = self.check_motion(self.samples[rows], self.samples[cols]) & (data <= self.conn_r)
 
-            # then filter for valid connections and construct graph
+            # then filter for valid connections and construct graph by way of networkx since networkit does not
+            # support adjacency matrix construction in Python :(
             gx = nx.from_scipy_sparse_array(
                 sparse.coo_array(
                     (data[valid_motions], (rows[valid_motions], cols[valid_motions])),
@@ -135,7 +135,7 @@ class SimplePRM:
         # Returned path is excluding the endpoints
 
         # first, loop start and goal into graph
-        indices, distances = self.nn_index.query(np.vstack([start, goal]))
+        indices, distances = self._query_just_over_conn_r(np.vstack([start, goal]))
 
         i_goal = self.g_prm.addNodes(2)
         i_start = i_goal - 1
@@ -168,7 +168,7 @@ class SimplePRM:
 
         # returns a N_pairs X 2 X dim array consisting of enter/exit points in the prm graph
         # and an N_pairs vector consisting of the distances between the enter and exit points in the prm
-        indices, distances = self.nn_index.query(np.vstack([start, goal]))
+        indices, distances = self._query_just_over_conn_r(np.vstack([start, goal]))
 
         start_nns = indices[0, distances[0] < self.conn_r]
         goal_nns = indices[1, distances[1] < self.conn_r]
@@ -176,14 +176,14 @@ class SimplePRM:
         coll_free_start_nns = start_nns[
             self.check_motion(
                 np.tile(start, (start_nns.shape[0], 1)),
-                start_nns
+                self.samples[start_nns]
             )
         ]
 
         coll_free_goal_nns = goal_nns[
             self.check_motion(
                 np.tile(goal, (goal_nns.shape[0], 1)),
-                goal_nns
+                self.samples[goal_nns]
             )
         ]
 
@@ -205,6 +205,16 @@ class SimplePRM:
             ], axis=0).swapaxes(0, 1),
             prm_sols_distances
         )
+
+    def _query_just_over_conn_r(self, queries):
+        # DO search using a doubling scheme. At most, complexity is equal to twice * num_samples (still linear)
+        # start with current neighbors...
+        k = self.k_neighbors
+        while True:
+            neighb_arr, dist_arr = self.nn_index.query(queries, k=k)
+            if k >= self.max_k_neighbors or k >= self.samples.shape[0] or np.all(dist_arr[:, -1] > self.conn_r):
+                return neighb_arr, dist_arr
+            k *= 2
 
     def num_vertices(self):
         return self.g_prm.numberOfNodes() if self.g_prm is not None else 0

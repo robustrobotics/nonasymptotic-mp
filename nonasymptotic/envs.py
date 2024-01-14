@@ -270,11 +270,11 @@ class StraightLine(Environment):
                 else:
                     print('timed out')
 
-                if vis:
-                    fig, axs = plt.subplots()
-                    plot_polygon(length_space_to_cover, ax=axs, color='red')
-                    plot_polygon(ranges, ax=axs, color='blue')
-                    plt.show()
+                    if vis:
+                        fig, axs = plt.subplots()
+                        plot_polygon(length_space_to_cover, ax=axs, color='red')
+                        plot_polygon(ranges, ax=axs, color='blue')
+                        plt.show()
 
                 print('covered fraction: %f' % (
                         ranges.intersection(length_space_to_cover).area / length_space_to_cover.area))
