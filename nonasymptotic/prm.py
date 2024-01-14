@@ -1,6 +1,5 @@
 from scipy import sparse
 from networkit.graphtools import GraphTools
-from itertools import product
 
 import numpy as np
 import pynndescent as pynn
@@ -141,6 +140,8 @@ class SimplePRM:
         i_goal = self.g_prm.addNodes(2)
         i_start = i_goal - 1
 
+        # adding edge locally in a loop is faster than coming up with a big sparse
+        # adjacency matrix and merging a converted graph in.
         for j_neighbor, d_ij in zip(indices[0], distances[0]):
             neighbor_j = self.samples[j_neighbor]
             if d_ij < self.conn_r and self.check_motion(start, neighbor_j):
