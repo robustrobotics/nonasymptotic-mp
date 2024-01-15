@@ -87,7 +87,8 @@ class StraightLine(Environment):
         proj_points_clipped = np.clip(points[:, 0], 0.0, 1.0).reshape(-1, 1)
         return np.linalg.norm(points - proj_points_clipped * self.line_dir, axis=1)
 
-    def is_prm_epsilon_delta_complete(self, prm, tol, timeout=60.0, n_samples_per_check=100, vis=False):
+    def is_prm_epsilon_delta_complete(self, prm, tol, n_samples_per_check=100, timeout=60.0, timeout_area_tol=1e-6,
+                                      vis=False):
         conn_r = prm.conn_r
         prm_points_to_cvx_hull = {}
 
@@ -271,7 +272,7 @@ class StraightLine(Environment):
                 #     [0.0, 1.0])
                 mp_left = difference(length_space_to_cover, cover_union)
                 sample_pt = self._random_point_in_mpolygon(mp_left)
-                length_space_sample = np.array(sample_pt.coords)
+                length_space_sample = np.array(sample_pt.coords).flatten()
                 heapq.heappush(
                     vertex_heap,
                     (np.inner(length_space_sample, order_vec), next(heap_tiebreaker), length_space_sample)
@@ -293,8 +294,6 @@ class StraightLine(Environment):
                 except IndexError:
                     break
 
-                # TODO: we likely are continuously adding/passing the (0, 1) point.
-                # we need to see if this point is the _only_ culprit and remove it.
                 if Point(prm_query).within(cover_union):
                     continue
 
@@ -311,6 +310,7 @@ class StraightLine(Environment):
                     map(lambda cds: Point(cds), new_cover_pts_coords)
                 ))
 
+                # add points that are not in the current cover union to the heap
                 indices_to_add = (np.logical_not(cover_union.covers(new_cover_points)) &
                                   length_space_to_cover.covers(new_cover_points))
 
@@ -328,19 +328,17 @@ class StraightLine(Environment):
 
                 if covers:
                     print('full cover!')
+                    return True
                 else:
-                    print('timed out')
-
+                    cover_frac = cover_union.intersection(length_space_to_cover).area / length_space_to_cover.area
+                    covered_enough = cover_frac >= 1.0 - timeout_area_tol
+                    print('timed out; covered fraction: %f; covered enough: %s' % (cover_frac, covered_enough))
                     if vis:
                         fig, axs = plt.subplots()
                         plot_polygon(length_space_to_cover, ax=axs, color='red')
                         plot_polygon(cover_union, ax=axs, color='blue')
                         plt.show()
-
-                print('covered fraction: %f' % (
-                        cover_union.intersection(length_space_to_cover).area / length_space_to_cover.area))
-
-                return True
+                    return covered_enough
 
     def _random_point_in_mpolygon(self, mpolygon):
         "Return list of k points chosen uniformly at random inside the polygon."
@@ -353,7 +351,7 @@ class StraightLine(Environment):
             (x0, y0), (x1, y1), (x2, y2), _ = t.exterior.coords
             transforms.append([x1 - x0, x2 - x0, y2 - y0, y1 - y0, x0, y0])
         areas = np.array(areas)
-        areas / np.sum(areas)
+        areas /= np.sum(areas)
         transform = self.rng.choice(transforms, p=areas)
         x, y = self.rng.uniform(size=(2,))
         if x + y > 1:
