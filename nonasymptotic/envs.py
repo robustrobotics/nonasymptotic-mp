@@ -101,6 +101,7 @@ class StraightLine(Environment):
 
         # a fix: https://stackoverflow.com/questions/39504333/
         # python-heapq-heappush-the-truth-value-of-an-array-with-more-than-one-element-is
+        # add in the corners of the triangle first
         heap_tiebreaker = count()
         vertex_heap = list(map(
             lambda pt: (np.inner(order_vec, pt), next(heap_tiebreaker), pt),
@@ -124,18 +125,6 @@ class StraightLine(Environment):
             return sols_in_and_outs[valid_pairs, :, :], sols_distances[valid_pairs]
 
         # some helpers since we'll be processing lots of points in the same way
-        def _add_to_set_system_using_convexity_only(query_point, sols_in_and_outs_as_identifiers):
-            for nd_prm_in, nd_prm_out in sols_in_and_outs_as_identifiers:
-                identifier = (Point(nd_prm_in), Point(nd_prm_out))
-
-                try:
-                    prm_points_to_cvx_hull[identifier] = (
-                        prm_points_to_cvx_hull[identifier]
-                        .union(Point(query_point))
-                        .convex_hull
-                    )
-                except KeyError:
-                    prm_points_to_cvx_hull[identifier] = Point(query_point)
 
         # some pre-processing for the next set adding helper (common computation)
         # this will define a long enough shadow that gives the effect of an open half-plane when
@@ -147,7 +136,7 @@ class StraightLine(Environment):
         ray_slope2 *= 2 / np.linalg.norm(ray_slope2)
 
         def _add_to_set_system_with_ray_shooting(query_point, sols_in_and_outs_as_identifiers, sol_dists):
-            new_cover_sets = []
+            _new_cover_sets = []
             for (nd_prm_in, nd_prm_out), prm_dist in zip(sols_in_and_outs_as_identifiers, sol_dists):
                 identifier = (Point(nd_prm_in), Point(nd_prm_out))
                 u_1, u_2 = nd_prm_in[0], np.linalg.norm(nd_prm_in[1:])
@@ -238,9 +227,9 @@ class StraightLine(Environment):
                     # plt.show()
                     # print('break!')
 
-                new_cover_sets.append(prm_points_to_cvx_hull[identifier])
+                _new_cover_sets.append(prm_points_to_cvx_hull[identifier])
 
-            return new_cover_sets
+            return _new_cover_sets
 
         def _process_query(query_point):
             # returns True if successfully queried, False if the PRM does not support the query with the
@@ -255,21 +244,11 @@ class StraightLine(Environment):
 
             return True, _new_cover_sets
 
-            # add in the corners of the triangle first, since we project to them with prob zero
-
-        # for tri_point in np.array(length_tri_points):
-        #    if not _process_query(tri_point):
-        #        return False
-
         cover_union = Polygon()
         while True:
             # if the heap is empty, sample a random point and see if the we can grow from there.
             if not vertex_heap:
                 # sample a point query new solutions and add convex sets
-                # unit_square_sample = self.rng.uniform(low=[0.0, 0.0], high=[1.0, 1.0])
-                # unit_triangle_sample = np.sort(unit_square_sample)
-                # length_space_sample = ((1.0 - conn_r) * (unit_triangle_sample - np.array([0.0, 1.0]))) + np.array(
-                #     [0.0, 1.0])
                 mp_left = difference(length_space_to_cover, cover_union)
                 sample_pt = self._random_point_in_mpolygon(mp_left)
                 length_space_sample = np.array(sample_pt.coords).flatten()
@@ -277,15 +256,6 @@ class StraightLine(Environment):
                     vertex_heap,
                     (np.inner(length_space_sample, order_vec), next(heap_tiebreaker), length_space_sample)
                 )
-
-                # if not _process_query(length_space_sample):
-                #     return False
-
-                # # project the point onto the boundary triangle
-                # proj_point, _ = nearest_points(length_space_to_cover.boundary, Point(length_space_sample))
-                # proj_sample = np.array(proj_point.coords).flatten()
-                # if not _process_query(proj_sample):
-                #     return False
 
             for i in range(n_samples_per_check):
 
@@ -342,6 +312,7 @@ class StraightLine(Environment):
 
     def _random_point_in_mpolygon(self, mpolygon):
         "Return list of k points chosen uniformly at random inside the polygon."
+        # This is a helper method in this class so we can share the random seed.
         # someone wrote this so we didn't have to:
         # https://codereview.stackexchange.com/questions/69833/generate-sample-coordinates-inside-a-polygon
         areas = []
