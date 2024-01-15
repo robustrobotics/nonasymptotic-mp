@@ -1,13 +1,17 @@
 import copy
 import time
+import heapq
 from abc import ABC, abstractmethod
+from itertools import count
 from enum import Enum
 
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
-from shapely import Point, Polygon, unary_union, LineString, MultiPolygon
-from shapely.ops import nearest_points
+from shapely import Point, Polygon, unary_union, LineString, MultiPolygon, difference
+from shapely.affinity import affine_transform
+from shapely.geometry import Point, Polygon
+from shapely.ops import triangulate, nearest_points
 from shapely.plotting import plot_polygon, plot_points, plot_line
 from sympy.combinatorics.graycode import GrayCode
 
@@ -87,10 +91,21 @@ class StraightLine(Environment):
         conn_r = prm.conn_r
         prm_points_to_cvx_hull = {}
 
-        length_tri_points = [(0.0, conn_r), (0.0, 1.0), (1.0 - conn_r, 1.0)]
+        length_tri_points = np.array([(0.0, conn_r), (0.0, 1.0), (1.0 - conn_r, 1.0)])
         length_space_to_cover = Polygon(length_tri_points)
 
+        order_vec = np.array([-np.sqrt(2), np.sqrt(2)]) / 2
+
         timeout_time = time.process_time() + timeout
+
+        # a fix: https://stackoverflow.com/questions/39504333/
+        # python-heapq-heappush-the-truth-value-of-an-array-with-more-than-one-element-is
+        heap_tiebreaker = count()
+        vertex_heap = list(map(
+            lambda pt: (np.inner(order_vec, pt), next(heap_tiebreaker), pt),
+            length_tri_points
+        ))
+        heapq.heapify(vertex_heap)
 
         def _find_valid_prm_entry_exit_points(sample_query):
             # use prm to find the valid queries (with respect to epsilon delta completeness)
@@ -131,6 +146,7 @@ class StraightLine(Environment):
         ray_slope2 *= 2 / np.linalg.norm(ray_slope2)
 
         def _add_to_set_system_with_ray_shooting(query_point, sols_in_and_outs_as_identifiers, sol_dists):
+            new_cover_sets = []
             for (nd_prm_in, nd_prm_out), prm_dist in zip(sols_in_and_outs_as_identifiers, sol_dists):
                 identifier = (Point(nd_prm_in), Point(nd_prm_out))
                 u_1, u_2 = nd_prm_in[0], np.linalg.norm(nd_prm_in[1:])
@@ -221,48 +237,93 @@ class StraightLine(Environment):
                     # plt.show()
                     # print('break!')
 
+                new_cover_sets.append(prm_points_to_cvx_hull[identifier])
+
+            return new_cover_sets
+
         def _process_query(query_point):
             # returns True if successfully queried, False if the PRM does not support the query with the
             # the required tolerance
             query_sol_ios, query_sol_dists = _find_valid_prm_entry_exit_points(query_point)
 
             if query_sol_ios.size <= 0:
-                print('not ed complete! failing query: %s' % str(query_point))
-                return False
+                print('not e-d complete! failing query: %s' % str(query_point))
+                return False, None
 
-            _add_to_set_system_with_ray_shooting(query_point, query_sol_ios, query_sol_dists)
+            _new_cover_sets = _add_to_set_system_with_ray_shooting(query_point, query_sol_ios, query_sol_dists)
 
-            return True
+            return True, _new_cover_sets
 
-        # add in the corners of the triangle first, since we project to them with prob zero
-        for tri_point in np.array(length_tri_points):
-            if not _process_query(tri_point):
-                return False
+            # add in the corners of the triangle first, since we project to them with prob zero
 
+        # for tri_point in np.array(length_tri_points):
+        #    if not _process_query(tri_point):
+        #        return False
+
+        cover_union = Polygon()
         while True:
-            # NOTE: a doubling scheme may work better?
-            for _ in range(n_samples_per_check):
+            # if the heap is empty, sample a random point and see if the we can grow from there.
+            if not vertex_heap:
                 # sample a point query new solutions and add convex sets
-                unit_square_sample = self.rng.uniform(low=[0.0, 0.0], high=[1.0, 1.0])
-                unit_triangle_sample = np.sort(unit_square_sample)
-                length_space_sample = ((1.0 - conn_r) * (unit_triangle_sample - np.array([0.0, 1.0]))) + np.array(
-                    [0.0, 1.0])
-                if not _process_query(length_space_sample):
+                # unit_square_sample = self.rng.uniform(low=[0.0, 0.0], high=[1.0, 1.0])
+                # unit_triangle_sample = np.sort(unit_square_sample)
+                # length_space_sample = ((1.0 - conn_r) * (unit_triangle_sample - np.array([0.0, 1.0]))) + np.array(
+                #     [0.0, 1.0])
+                mp_left = difference(length_space_to_cover, cover_union)
+                sample_pt = self._random_point_in_mpolygon(mp_left)
+                length_space_sample = np.array(sample_pt.coords)
+                heapq.heappush(
+                    vertex_heap,
+                    (np.inner(length_space_sample, order_vec), next(heap_tiebreaker), length_space_sample)
+                )
+
+                # if not _process_query(length_space_sample):
+                #     return False
+
+                # # project the point onto the boundary triangle
+                # proj_point, _ = nearest_points(length_space_to_cover.boundary, Point(length_space_sample))
+                # proj_sample = np.array(proj_point.coords).flatten()
+                # if not _process_query(proj_sample):
+                #     return False
+
+            for i in range(n_samples_per_check):
+
+                try:
+                    _, _, prm_query = heapq.heappop(vertex_heap)
+                except IndexError:
+                    break
+
+                # TODO: we likely are continuously adding/passing the (0, 1) point.
+                # we need to see if this point is the _only_ culprit and remove it.
+                if Point(prm_query).within(cover_union):
+                    continue
+
+                query_successful, new_cover_sets = _process_query(prm_query)
+
+                if not query_successful:
                     return False
 
-                # project the point onto the boundary triangle
-                proj_point, _ = nearest_points(length_space_to_cover.boundary, Point(length_space_sample))
-                proj_sample = np.array(proj_point.coords).flatten()
-                if not _process_query(proj_sample):
-                    return False
+                new_cover_sets_union = unary_union(new_cover_sets)
+                new_cover_pts_coords = np.array(
+                    new_cover_sets_union.intersection(length_space_to_cover).boundary.coords
+                )[:-1]  # last point repeats the first
+                new_cover_points = np.array(list(
+                    map(lambda cds: Point(cds), new_cover_pts_coords)
+                ))
 
-            # compute new union polygon... we're forced to use Shapely since CGAL is missing bindings to do
-            # the same computations.
+                indices_to_add = (np.logical_not(cover_union.covers(new_cover_points)) &
+                                  length_space_to_cover.covers(new_cover_points))
 
-            ranges = unary_union(list(prm_points_to_cvx_hull.values()))
+                for pt_coords in new_cover_pts_coords[indices_to_add]:
+                    heapq.heappush(
+                        vertex_heap, (np.inner(pt_coords, order_vec), next(heap_tiebreaker), pt_coords)
+                    )
+
+                cover_union = cover_union.union(new_cover_sets_union)
+
             # continue until timeout (where we confirm or deny? decide). or if we're covered return true
             # or if we don't have an admissible solution, return false.
-            covers = ranges.covers(length_space_to_cover)
+            covers = cover_union.covers(length_space_to_cover)
             if covers or time.process_time() > timeout_time:
 
                 if covers:
@@ -273,13 +334,34 @@ class StraightLine(Environment):
                     if vis:
                         fig, axs = plt.subplots()
                         plot_polygon(length_space_to_cover, ax=axs, color='red')
-                        plot_polygon(ranges, ax=axs, color='blue')
+                        plot_polygon(cover_union, ax=axs, color='blue')
                         plt.show()
 
                 print('covered fraction: %f' % (
-                        ranges.intersection(length_space_to_cover).area / length_space_to_cover.area))
+                        cover_union.intersection(length_space_to_cover).area / length_space_to_cover.area))
 
                 return True
+
+    def _random_point_in_mpolygon(self, mpolygon):
+        "Return list of k points chosen uniformly at random inside the polygon."
+        # someone wrote this so we didn't have to:
+        # https://codereview.stackexchange.com/questions/69833/generate-sample-coordinates-inside-a-polygon
+        areas = []
+        transforms = []
+        for t in triangulate(mpolygon):
+            areas.append(t.area)
+            (x0, y0), (x1, y1), (x2, y2), _ = t.exterior.coords
+            transforms.append([x1 - x0, x2 - x0, y2 - y0, y1 - y0, x0, y0])
+        areas = np.array(areas)
+        areas / np.sum(areas)
+        transform = self.rng.choice(transforms, p=areas)
+        x, y = self.rng.uniform(size=(2,))
+        if x + y > 1:
+            p = Point(1 - x, 1 - y)
+        else:
+            p = Point(x, y)
+
+        return affine_transform(p, transform)
 
 
 class GrayCodeWalls(Environment):
