@@ -203,7 +203,8 @@ class SimplePRM:
                 self.samples[prm_sols_in_and_outs[:, 0]],
                 self.samples[prm_sols_in_and_outs[:, 1]]
             ], axis=0).swapaxes(0, 1),
-            prm_sols_distances
+            prm_sols_distances,
+            prm_sols_in_and_outs
         )
 
     def _query_just_over_conn_r(self, queries):
