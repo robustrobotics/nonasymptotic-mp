@@ -87,7 +87,7 @@ class StraightLine(Environment):
         proj_points_clipped = np.clip(points[:, 0], 0.0, 1.0).reshape(-1, 1)
         return np.linalg.norm(points - proj_points_clipped * self.line_dir, axis=1)
 
-    def is_prm_epsilon_delta_complete(self, prm, tol, n_samples_per_check=100, timeout=60.0, timeout_area_tol=1e-6,
+    def is_prm_epsilon_delta_complete(self, prm, tol, n_samples_per_check=100, timeout=60.0, timeout_area_tol=1e-10,
                                       vis=False):
         conn_r = prm.conn_r
         prm_points_to_cvx_hull = {}
@@ -141,12 +141,15 @@ class StraightLine(Environment):
             # x opt 3: if the key existed before and the query was inside the set, its not a new coverset
             # san 4: ensure that when subselecting from the same numpy array that point pairs hash the same
             # TODO: use more stable identifiers
+            # TODO: debug inverted query problem.
             # this may be all we can do in terms of optimization... unless we start subselecting nearest neighbors...
 
             _new_cover_sets = []
             for id_io, (nd_prm_in, nd_prm_out), prm_dist in zip(sols_ids, sols_in_and_outs_coords, sol_dists):
                 u_1, u_2 = nd_prm_in[0], np.linalg.norm(nd_prm_in[1:])
                 v_1, v_2 = nd_prm_out[0], np.linalg.norm(nd_prm_out[1:])
+
+                id_io = tuple(id_io)
 
                 try:
                     cvx_hull, conn_r_bounding_box = prm_points_to_cvx_hull[id_io]
@@ -174,17 +177,36 @@ class StraightLine(Environment):
                     # in this situation, to get as much bang for buck as possible, we can
                     # take the L_1 inner approximation
 
-                    inner_approx_p1 = np.array([u_1,
-                                                (prm_dist + u_1 + v_1 + u_2 + v_2 + tol * u_1) / (2 + tol)])
-                    inner_approx_p2 = np.array([(prm_dist - u_1 - v_1 + u_2 + v_2 - tol * v_1) / -(2 + tol),
-                                                v_1])
+                    # TODO deal with empty intersection of inner approx
+                    # if we DO NOT contain the the point (u_1, v_1) in the admissible set
+                    # inner_approx_p1 = np.array([u_1, (u_2 + (1 + tol)*u_1 + v_2 + prm_dist - v_1) / tol])
+                    # inner_approx_p2 = np.array([(u_2 + v_2 + prm_dist - (1 + tol) * v_1 + u_1) / -tol, v_1])
+
+                    # if we DO contain the the point (u_1, v_1) in the admissible set
+                    # inner_approx_p1 = np.array([u_1, (u_2 + (1 + tol)*u_1 + v_2 + prm_dist + v_1) / (tol + 2)])
+                    # inner_approx_p2 = np.array([(u_2 + v_2 + prm_dist - (1 + tol) * v_1 - u_1) / -(2 + tol), v_1])
+
+                    # in admissible set:
+                    vertex_line_proj_admissible = prm_dist + u_2 + v_2 <= (1 + tol) * (v_1 - u_1)
+
+                    if not vertex_line_proj_admissible:
+                        inner_approx_p1 = np.array([u_1, (u_2 + (1 + tol) * u_1 + v_2 + prm_dist - v_1) / tol])
+                        inner_approx_p2 = np.array([(u_2 + v_2 + prm_dist - (1 + tol) * v_1 + u_1) / -tol, v_1])
+
+                        inner_approx_ray_p1 = inner_approx_p1 + ray_slope2
+                        inner_approx_ray_p2 = inner_approx_p2 + ray_slope1
+                    else:
+                        inner_approx_p1 = np.array([u_1, (u_2 + (1 + tol) * u_1 + v_2 + prm_dist + v_1) / (tol + 2)])
+                        inner_approx_p2 = np.array([(u_2 + v_2 + prm_dist - (1 + tol) * v_1 - u_1) / -(2 + tol), v_1])
+
+                        inner_approx_ray_p1 = inner_approx_p1 + ray_slope1
+                        inner_approx_ray_p2 = inner_approx_p1 + ray_slope2
 
                     # the ray we add depends on arrangement of approx_p1 and approx_p2
-                    inner_not_flip_rays = inner_approx_p1[1] < v_1
-                    inner_approx_ray_p1, inner_approx_ray_p2 = (inner_approx_p1 + ray_slope1,
-                                                                inner_approx_p2 + ray_slope2) \
-                        if inner_not_flip_rays else (inner_approx_p1 + ray_slope2,
-                                                     inner_approx_p2 + ray_slope1)
+                    # inner_approx_ray_p1, inner_approx_ray_p2 = (inner_approx_p1 + ray_slope1,
+                    #                                             inner_approx_p2 + ray_slope2) \
+                    #     if inner_not_flip_rays else (inner_approx_p1 + ray_slope2,
+                    #                                  inner_approx_p2 + ray_slope1)
 
                     inner_approx_open = Polygon([inner_approx_ray_p1,
                                                  inner_approx_p1,
@@ -193,11 +215,22 @@ class StraightLine(Environment):
 
                     if inner_approx_open.covers(Point(query_point)):
                         cvx_hull = inner_approx_open.intersection(conn_r_bounding_box)
+                        # plt.figure()
+                        # fig, ax = plt.subplots()
+                        # plot_polygon(conn_r_bounding_box, ax, color='green')
+                        # plot_polygon(inner_approx_open.intersection(conn_r_bounding_box), color='purple')
+                        # plt.show()
 
                     else:
                         # the query point + its shadow
                         query_shadow = Polygon([query_point, query_point + ray_slope1, query_point + ray_slope2])
                         cvx_hull = inner_approx_open.union(query_shadow).intersection(conn_r_bounding_box).convex_hull
+                        # plt.figure()
+                        # fig, ax = plt.subplots()
+                        # plot_polygon(conn_r_bounding_box, ax, color='green')
+                        # plot_polygon(query_shadow.intersection(conn_r_bounding_box), color='red')
+                        # plot_polygon(inner_approx_open.intersection(conn_r_bounding_box), color='purple')
+                        # plt.show()
 
                 prm_points_to_cvx_hull[id_io] = (cvx_hull, conn_r_bounding_box)
                 _new_cover_sets.append(cvx_hull)
@@ -211,6 +244,13 @@ class StraightLine(Environment):
 
             if query_sol_ios.size <= 0:
                 print('not e-d complete! failing query: %s' % str(query_point))
+
+                if vis:
+                    fig, axs = plt.subplots()
+                    plot_polygon(length_space_to_cover, ax=axs, color='red')
+                    plot_polygon(cover_union, ax=axs, color='blue')
+                    plot_points(Point(query_point), ax=axs, color='green')
+                    plt.show()
                 return False, None
 
             _new_cover_sets = _add_to_set_system_with_ray_shooting(
@@ -227,9 +267,23 @@ class StraightLine(Environment):
                 mp_left = difference(length_space_to_cover, cover_union)
                 sample_pt = self._random_point_in_mpolygon(mp_left)
                 length_space_sample = np.array(sample_pt.coords).flatten()
+
+                # if vis:
+                #     fig, axs = plt.subplots()
+                #     plot_polygon(mp_left, ax=axs, color='blue')
+                #     plot_points(sample_pt, ax=axs, color='green')
+                #     plt.show()
+
                 heapq.heappush(
                     vertex_heap,
                     (np.inner(length_space_sample, order_vec), next(heap_tiebreaker), length_space_sample)
+                )
+
+                # project over to boundary so we can try to get a deterministic completeness instead of sampling around
+                proj_sample = np.array(nearest_points(mp_left, sample_pt)[0].coords).flatten()
+                heapq.heappush(
+                    vertex_heap,
+                    (np.inner(proj_sample, order_vec), next(heap_tiebreaker), proj_sample)
                 )
 
             for i in range(n_samples_per_check):
@@ -248,54 +302,59 @@ class StraightLine(Environment):
                     return False
 
                 new_cover_sets_union = unary_union(new_cover_sets)
-                new_cover_pts_coords = np.array(
-                    new_cover_sets_union.intersection(length_space_to_cover).boundary.coords
-                )[:-1]  # last point repeats the first
-                new_cover_points = np.array(list(
-                    map(lambda cds: Point(cds), new_cover_pts_coords)
-                ))
 
-                # add points that are not in the current cover union to the heap
-                indices_to_add = (np.logical_not(cover_union.covers(new_cover_points)) &
-                                  length_space_to_cover.covers(new_cover_points))
+                try:
+                    new_cover_pts_coords = np.array(
+                        new_cover_sets_union.intersection(length_space_to_cover).boundary.coords
+                    )[:-1]  # last point repeats the first
+                    new_cover_points = np.array(list(
+                        map(lambda cds: Point(cds), new_cover_pts_coords)
+                    ))
 
-                for pt_coords in new_cover_pts_coords[indices_to_add]:
-                    heapq.heappush(
-                        vertex_heap, (np.inner(pt_coords, order_vec), next(heap_tiebreaker), pt_coords)
-                    )
+                    # add points that are not in the current cover union to the heap
+                    indices_to_add = (np.logical_not(cover_union.covers(new_cover_points)) &
+                                      length_space_to_cover.covers(new_cover_points))
 
-                cover_union = cover_union.union(new_cover_sets_union)
+                    for pt_coords in new_cover_pts_coords[indices_to_add]:
+                        heapq.heappush(
+                            vertex_heap, (np.inner(pt_coords, order_vec), next(heap_tiebreaker), pt_coords)
+                        )
+
+                    cover_union = cover_union.union(new_cover_sets_union)
+
+                except AttributeError:
+                    # here, we catch the error if we query a new point but it doesn't grow the
+                    # current coverage area at all.
+                    continue
 
             # continue until timeout (where we confirm or deny? decide). or if we're covered return true
             # or if we don't have an admissible solution, return false.
-            covers = cover_union.covers(length_space_to_cover)
-            if covers or time.process_time() > timeout_time:
+            cover_frac = cover_union.intersection(length_space_to_cover).area / length_space_to_cover.area
+            if cover_frac > 1.0 - timeout_area_tol:
+                print('covered!')
+                return True
 
-                if covers:
-                    print('full cover!')
-                    return True
-                else:
-                    cover_frac = cover_union.intersection(length_space_to_cover).area / length_space_to_cover.area
-                    covered_enough = cover_frac >= 1.0 - timeout_area_tol
-                    print('timed out; covered fraction: %f; covered enough: %s' % (cover_frac, covered_enough))
-                    if vis:
-                        fig, axs = plt.subplots()
-                        plot_polygon(length_space_to_cover, ax=axs, color='red')
-                        plot_polygon(cover_union, ax=axs, color='blue')
-                        plt.show()
-                    return covered_enough
+            elif time.process_time() > timeout_time:
+                print('timed out; covered fraction: %f' % cover_frac)
+                if vis:
+                    fig, axs = plt.subplots()
+                    plot_polygon(length_space_to_cover, ax=axs, color='red')
+                    plot_polygon(cover_union, ax=axs, color='blue')
+                    plt.show()
+                return False
 
     def _random_point_in_mpolygon(self, mpolygon):
         "Return list of k points chosen uniformly at random inside the polygon."
         # This is a helper method in this class so we can share the random seed.
         # someone wrote this so we didn't have to:
         # https://codereview.stackexchange.com/questions/69833/generate-sample-coordinates-inside-a-polygon
+        # (but I had to correct it because it wrote down the matrix slightly wrong).
         areas = []
         transforms = []
         for t in triangulate(mpolygon):
             areas.append(t.area)
             (x0, y0), (x1, y1), (x2, y2), _ = t.exterior.coords
-            transforms.append([x1 - x0, x2 - x0, y2 - y0, y1 - y0, x0, y0])
+            transforms.append([x1 - x0, x2 - x0, y1 - y0, y2 - y0, x0, y0])
         areas = np.array(areas)
         areas /= np.sum(areas)
         transform = self.rng.choice(transforms, p=areas)
@@ -305,7 +364,8 @@ class StraightLine(Environment):
         else:
             p = Point(x, y)
 
-        return affine_transform(p, transform)
+        tp = affine_transform(p, transform)
+        return tp
 
 
 class GrayCodeWalls(Environment):
