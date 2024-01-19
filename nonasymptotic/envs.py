@@ -87,13 +87,16 @@ class StraightLine(Environment):
         proj_points_clipped = np.clip(points[:, 0], 0.0, 1.0).reshape(-1, 1)
         return np.linalg.norm(points - proj_points_clipped * self.line_dir, axis=1)
 
-    def is_prm_epsilon_delta_complete(self, prm, tol, n_samples_per_check=100, timeout=60.0, timeout_area_tol=1e-10,
+    def is_prm_epsilon_delta_complete(self, prm, tol, n_samples_per_check=100, timeout=60.0, timeout_area_tol=1e-6,
                                       vis=False):
         conn_r = prm.conn_r
         prm_points_to_cvx_hull = {}
 
         length_tri_points = np.array([(0.0, conn_r), (0.0, 1.0), (1.0 - conn_r, 1.0)])
         length_space_to_cover = Polygon(length_tri_points)
+
+        base_line_points = np.array([(0.0, conn_r), (1.0 - conn_r, 1.0)])
+        base_line = LineString(base_line_points)
 
         order_vec = np.array([-np.sqrt(2), np.sqrt(2)]) / 2
 
@@ -136,14 +139,6 @@ class StraightLine(Environment):
         ray_slope2 *= 2 / np.linalg.norm(ray_slope2)
 
         def _add_to_set_system_with_ray_shooting(query_point, sols_in_and_outs_coords, sol_dists, sols_ids):
-            # x opt 1: if the query point is already in the set, then we can just toss it.
-            # x opt 2: save the conn_r bounding boxes, since they are used every time.
-            # x opt 3: if the key existed before and the query was inside the set, its not a new coverset
-            # san 4: ensure that when subselecting from the same numpy array that point pairs hash the same
-            # TODO: use more stable identifiers
-            # TODO: debug inverted query problem.
-            # this may be all we can do in terms of optimization... unless we start subselecting nearest neighbors...
-
             _new_cover_sets = []
             for id_io, (nd_prm_in, nd_prm_out), prm_dist in zip(sols_ids, sols_in_and_outs_coords, sol_dists):
                 u_1, u_2 = nd_prm_in[0], np.linalg.norm(nd_prm_in[1:])
@@ -176,15 +171,6 @@ class StraightLine(Environment):
 
                     # in this situation, to get as much bang for buck as possible, we can
                     # take the L_1 inner approximation
-
-                    # TODO deal with empty intersection of inner approx
-                    # if we DO NOT contain the the point (u_1, v_1) in the admissible set
-                    # inner_approx_p1 = np.array([u_1, (u_2 + (1 + tol)*u_1 + v_2 + prm_dist - v_1) / tol])
-                    # inner_approx_p2 = np.array([(u_2 + v_2 + prm_dist - (1 + tol) * v_1 + u_1) / -tol, v_1])
-
-                    # if we DO contain the the point (u_1, v_1) in the admissible set
-                    # inner_approx_p1 = np.array([u_1, (u_2 + (1 + tol)*u_1 + v_2 + prm_dist + v_1) / (tol + 2)])
-                    # inner_approx_p2 = np.array([(u_2 + v_2 + prm_dist - (1 + tol) * v_1 - u_1) / -(2 + tol), v_1])
 
                     # in admissible set:
                     vertex_line_proj_admissible = prm_dist + u_2 + v_2 <= (1 + tol) * (v_1 - u_1)
@@ -280,11 +266,20 @@ class StraightLine(Environment):
                 )
 
                 # project over to boundary so we can try to get a deterministic completeness instead of sampling around
-                proj_sample = np.array(nearest_points(mp_left, sample_pt)[0].coords).flatten()
+                border_proj_sample = np.array(nearest_points(mp_left, sample_pt)[0].coords).flatten()
                 heapq.heappush(
                     vertex_heap,
-                    (np.inner(proj_sample, order_vec), next(heap_tiebreaker), proj_sample)
+                    (np.inner(border_proj_sample, order_vec), next(heap_tiebreaker), border_proj_sample)
                 )
+
+                base_proj_sample = np.array(nearest_points(base_line, sample_pt)[0].coords).flatten()
+                heapq.heappush(
+                    vertex_heap,
+                    (np.inner(base_proj_sample, order_vec), next(heap_tiebreaker), base_proj_sample)
+                )
+
+
+
 
             for i in range(n_samples_per_check):
 
