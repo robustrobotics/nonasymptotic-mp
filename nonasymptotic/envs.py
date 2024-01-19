@@ -1,18 +1,18 @@
 import copy
-import time
 import heapq
+import time
 from abc import ABC, abstractmethod
-from itertools import count
 from enum import Enum
+from itertools import count
 
+import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-import matplotlib.pyplot as plt
-from shapely import Point, Polygon, unary_union, LineString, MultiPolygon, difference
+from shapely import unary_union, LineString, difference
 from shapely.affinity import affine_transform
 from shapely.geometry import Point, Polygon
 from shapely.ops import triangulate, nearest_points
-from shapely.plotting import plot_polygon, plot_points, plot_line
+from shapely.plotting import plot_polygon, plot_points
 from sympy.combinatorics.graycode import GrayCode
 
 
@@ -224,7 +224,7 @@ class StraightLine(Environment):
                 return _new_cover_sets
 
         def _process_query(query_point):
-            # returns True if successfully queried, False if the PRM does not support the query with the
+            # returns True if successfully queried, False if the PRM does not support the query with
             # the required tolerance
             query_sol_ios, query_sol_dists, sols_ids = _find_valid_prm_entry_exit_points(query_point)
 
@@ -232,10 +232,10 @@ class StraightLine(Environment):
                 print('not e-d complete! failing query: %s' % str(query_point))
 
                 if vis:
-                    fig, axs = plt.subplots()
-                    plot_polygon(length_space_to_cover, ax=axs, color='red')
-                    plot_polygon(cover_union, ax=axs, color='blue')
-                    plot_points(Point(query_point), ax=axs, color='green')
+                    _fig, _axs = plt.subplots()
+                    plot_polygon(length_space_to_cover, ax=_axs, color='red')
+                    plot_polygon(cover_union, ax=_axs, color='blue')
+                    plot_points(Point(query_point), ax=_axs, color='green')
                     plt.show()
                 return False, None
 
@@ -247,7 +247,8 @@ class StraightLine(Environment):
 
         cover_union = Polygon()
         while True:
-            # if the heap is empty, sample a random point and see if the we can grow from there.
+            # if the heap is empty, sample a random point and see if we can grow from there.
+
             if not vertex_heap:
                 # sample a point query new solutions and add convex sets
                 mp_left = difference(length_space_to_cover, cover_union)
@@ -277,9 +278,6 @@ class StraightLine(Environment):
                     vertex_heap,
                     (np.inner(base_proj_sample, order_vec), next(heap_tiebreaker), base_proj_sample)
                 )
-
-
-
 
             for i in range(n_samples_per_check):
 
@@ -339,7 +337,7 @@ class StraightLine(Environment):
                 return False
 
     def _random_point_in_mpolygon(self, mpolygon):
-        "Return list of k points chosen uniformly at random inside the polygon."
+        """Return list of k points chosen uniformly at random inside the polygon."""
         # This is a helper method in this class so we can share the random seed.
         # someone wrote this so we didn't have to:
         # https://codereview.stackexchange.com/questions/69833/generate-sample-coordinates-inside-a-polygon
