@@ -17,9 +17,8 @@ import networkx as nx
 import numpy as np
 
 
-# TODO: explore precision of the set system
-# TODO: numerics idea... examine the projection code to make sure we're not projecting twice
-# TODO: apply new knowledge about shapely operators to try to vectorize geom calculations
+# NOTE: apply new knowledge about shapely operators to try to vectorize geom calculations
+# dict set system implementation does not help us.
 
 class Environment(ABC):
 
@@ -101,7 +100,7 @@ class StraightLine(Environment):
         length_space_to_cover = Polygon(length_tri_points)
 
         base_line_points = np.array([(0.0, conn_r), (1.0 - conn_r, 1.0)])
-        base_line = LineString(base_line_points)
+        # base_line = LineString(base_line_points)
 
         order_vec = np.array([-np.sqrt(2), np.sqrt(2)]) / 2
 
