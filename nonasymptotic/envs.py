@@ -91,7 +91,7 @@ class StraightLine(Environment):
         proj_points_clipped = np.clip(points[:, 0], 0.0, 1.0).reshape(-1, 1)
         return np.linalg.norm(points - proj_points_clipped * self.line_dir, axis=1)
 
-    def is_prm_epsilon_delta_complete(self, prm, tol, n_samples_per_check=100, timeout=60.0, timeout_area_tol=1e-6,
+    def is_prm_epsilon_delta_complete(self, prm, tol, n_samples_per_check=100, timeout=60.0, area_tol=1e-6,
                                       vis=False):
         conn_r = prm.conn_r
         prm_points_to_cvx_hull = {}
@@ -297,7 +297,7 @@ class StraightLine(Environment):
                 query_successful, new_cover_sets = _process_query(prm_query)
 
                 if not query_successful:
-                    return False
+                    return False, 'failed query: %s' % str(prm_query)
 
                 new_cover_sets_union = unary_union(new_cover_sets)
 
@@ -328,9 +328,8 @@ class StraightLine(Environment):
             # continue until timeout (where we confirm or deny? decide). or if we're covered return true
             # or if we don't have an admissible solution, return false.
             cover_frac = cover_union.intersection(length_space_to_cover).area / length_space_to_cover.area
-            if cover_frac > 1.0 - timeout_area_tol:
-                print('covered!')
-                return True
+            if cover_frac > 1.0 - area_tol:
+                return True, 'covered'
 
             elif time.process_time() > timeout_time:
                 print('timed out; covered fraction: %f' % cover_frac)
@@ -339,7 +338,7 @@ class StraightLine(Environment):
                     plot_polygon(length_space_to_cover, ax=axs, color='red')
                     plot_polygon(cover_union, ax=axs, color='blue')
                     plt.show()
-                return False
+                return False, 'timed out'
 
 
 class GrayCodeWalls(Environment):
