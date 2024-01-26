@@ -17,8 +17,8 @@ import networkx as nx
 import numpy as np
 
 
-
 # TODO: explore precision of the set system
+# TODO: numerics idea... examine the projection code to make sure we're not projecting twice
 # TODO: apply new knowledge about shapely operators to try to vectorize geom calculations
 
 class Environment(ABC):
@@ -278,11 +278,12 @@ class StraightLine(Environment):
                     (np.inner(border_proj_sample, order_vec), next(heap_tiebreaker), border_proj_sample)
                 )
 
-                base_proj_sample = np.array(nearest_points(base_line, sample_pt)[0].coords).flatten()
-                heapq.heappush(
-                    vertex_heap,
-                    (np.inner(base_proj_sample, order_vec), next(heap_tiebreaker), base_proj_sample)
-                )
+                # base_proj_sample = np.array(nearest_points(base_line, sample_pt)[0].coords).flatten()
+                # base_proj_sample[1] = base_proj_sample[0] + conn_r  # try to improve numerics
+                # heapq.heappush(
+                #     vertex_heap,
+                #     (np.inner(base_proj_sample, order_vec), next(heap_tiebreaker), base_proj_sample)
+                # )
 
             for i in range(n_samples_per_check):
 

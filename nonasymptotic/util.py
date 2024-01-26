@@ -54,7 +54,7 @@ def random_point_in_mpolygon(mpolygon, rng=None, vis=False):
     data = {
         'vertices': vertices,
         'segments': segments,
-        'holes': [[1000.0, 1000.0]]
+        'holes': [[101.0, 100.0]]
         # put a point that will always be outside because of boundedness of input space
     }
 
