@@ -1,13 +1,16 @@
 from shapely.geometry import Point
 from shapely.affinity import affine_transform
 from shapely.coordinates import get_coordinates
-from shapely import get_num_points, MultiPolygon
+from shapely import get_num_points, MultiPolygon, Polygon, LineString, MultiPoint
 
 import numpy as np
 import triangle as tr
 
+import matplotlib.pyplot as plt
+from shapely.plotting import plot_polygon
 
-def random_point_in_mpolygon(mpolygon, rng=None):
+
+def random_point_in_mpolygon(mpolygon, rng=None, vis=False):
     """Return list of k points chosen uniformly at random inside the polygon."""
     # This is a helper method in this class so we can share the random seed.
     # someone wrote this so we didn't have to:
@@ -42,24 +45,31 @@ def random_point_in_mpolygon(mpolygon, rng=None):
     conn_to_arr = np.delete(conn_from_arr, roll_indices)
     conn_to_arr = np.insert(
         conn_to_arr,  # subtract arange to account for shift of deleted vertices
-        np.concatenate([[0], num_pts_in_polys[:-1] - 1]) - np.arange(n_polys),
+        np.cumsum(np.concatenate([[0], num_pts_in_polys[:-1] - 1])) - np.arange(n_polys),
         roll_indices
     )
     segments = np.hstack([conn_from_arr.reshape(-1, 1), conn_to_arr.reshape(-1, 1)])
 
     # compute triangulation
-    triangle_out = tr.triangulate(
-        {
-            'vertices': vertices,
-            'segments': segments,
-            'holes': [[1000.0, 1000.0]]  # put a point that will always be outside because of boundedness of input space
-        },
-        'p'  # so the boundaries are included in the triangulation
-    )
+    data = {
+        'vertices': vertices,
+        'segments': segments,
+        'holes': [[1000.0, 1000.0]]
+        # put a point that will always be outside because of boundedness of input space
+    }
+
+    triangle_out = tr.triangulate(data, 'p')  # so the boundaries are included in the triangulation
 
     # extract triangles (in terms of coordinates) using advanced indexing
     # dims: (N tries) X (3 points in tries) X (2D coords)
     triangles = triangle_out['vertices'][triangle_out['triangles']]
+
+    if vis:
+        fig, ax = plt.subplots()
+        plot_polygon(mpolygon, ax=ax, color='blue')
+        for triangle in triangles:
+            plot_polygon(Polygon(triangle), ax=ax, color='purple')
+        plt.show()
 
     # compute areas by evaluating det explicitly (easier than forming explicit matrices)
     x1s = triangles[:, 0, 0]

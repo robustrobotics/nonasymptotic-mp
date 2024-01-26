@@ -16,7 +16,7 @@ class TestRandomSampling:
 
     def sample_membership_test(self, geom):
         samples = np.array(
-            [random_point_in_mpolygon(geom, rng=self.rng) for _ in range(1000)]
+            [random_point_in_mpolygon(geom, rng=self.rng, vis=True) for _ in range(1)]
         )
 
         is_member = geom.covers(samples)
@@ -41,3 +41,20 @@ class TestRandomSampling:
 
     def test_sample_membership_tri_square(self):
         self.sample_membership_test(self.tri_square)
+
+    def test_bad_call(self):
+        import pickle
+        import triangle as tr
+        with open('bad_triangle_call.pkl', 'rb') as handle:
+            data = pickle.load(handle)
+
+        fig, ax = plt.subplots()
+        plot_polygon(data['mpolygon'], ax=ax, color='blue')
+
+        del data['mpolygon']
+        triangle_out = tr.triangulate(data, 'p')
+        triangles = triangle_out['vertices'][triangle_out['triangles']]
+
+        for triangle in triangles:
+            plot_polygon(Polygon(triangle), ax=ax, color='purple')
+        plt.show()
