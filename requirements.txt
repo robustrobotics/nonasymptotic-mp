@@ -7,3 +7,4 @@ networkit~=10.1
 shapely~=2.0.2
 matplotlib~=3.7.1
 scipy~=1.10.1
+triangle~=20230923

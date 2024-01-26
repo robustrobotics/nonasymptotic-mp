@@ -1,20 +1,25 @@
-import copy
-import heapq
-import time
+from nonasymptotic.util import random_point_in_mpolygon
+from shapely import unary_union, LineString, difference
+from shapely.geometry import Point, Polygon
+from shapely.ops import nearest_points
+from shapely.plotting import plot_polygon, plot_points
+from sympy.combinatorics.graycode import GrayCode
+
 from abc import ABC, abstractmethod
 from enum import Enum
 from itertools import count
 
+import copy
+import heapq
+import time
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-from shapely import unary_union, LineString, difference
-from shapely.affinity import affine_transform
-from shapely.geometry import Point, Polygon
-from shapely.ops import triangulate, nearest_points
-from shapely.plotting import plot_polygon, plot_points
-from sympy.combinatorics.graycode import GrayCode
 
+
+
+# TODO: explore precision of the set system
+# TODO: apply new knowledge about shapely operators to try to vectorize geom calculations
 
 class Environment(ABC):
 
@@ -102,7 +107,7 @@ class StraightLine(Environment):
 
         timeout_time = time.process_time() + timeout
 
-        # a fix: https://stackoverflow.com/questions/39504333/
+        # a fix so we do not compare point arrays: https://stackoverflow.com/questions/39504333/
         # python-heapq-heappush-the-truth-value-of-an-array-with-more-than-one-element-is
         # add in the corners of the triangle first
         heap_tiebreaker = count()
@@ -252,14 +257,14 @@ class StraightLine(Environment):
             if not vertex_heap:
                 # sample a point query new solutions and add convex sets
                 mp_left = difference(length_space_to_cover, cover_union)
-                sample_pt = self._random_point_in_mpolygon(mp_left)
+                sample_pt = random_point_in_mpolygon(mp_left, rng=self.rng)
                 length_space_sample = np.array(sample_pt.coords).flatten()
 
-                # if vis:
-                #     fig, axs = plt.subplots()
-                #     plot_polygon(mp_left, ax=axs, color='blue')
-                #     plot_points(sample_pt, ax=axs, color='green')
-                #     plt.show()
+                if vis:
+                    fig, axs = plt.subplots()
+                    plot_polygon(mp_left, ax=axs, color='blue')
+                    plot_points(sample_pt, ax=axs, color='green')
+                    plt.show()
 
                 heapq.heappush(
                     vertex_heap,
@@ -335,30 +340,6 @@ class StraightLine(Environment):
                     plot_polygon(cover_union, ax=axs, color='blue')
                     plt.show()
                 return False
-
-    def _random_point_in_mpolygon(self, mpolygon):
-        """Return list of k points chosen uniformly at random inside the polygon."""
-        # This is a helper method in this class so we can share the random seed.
-        # someone wrote this so we didn't have to:
-        # https://codereview.stackexchange.com/questions/69833/generate-sample-coordinates-inside-a-polygon
-        # (but I had to correct it because it wrote down the matrix slightly wrong).
-        areas = []
-        transforms = []
-        for t in triangulate(mpolygon):
-            areas.append(t.area)
-            (x0, y0), (x1, y1), (x2, y2), _ = t.exterior.coords
-            transforms.append([x1 - x0, x2 - x0, y1 - y0, y2 - y0, x0, y0])
-        areas = np.array(areas)
-        areas /= np.sum(areas)
-        transform = self.rng.choice(transforms, p=areas)
-        x, y = self.rng.uniform(size=(2,))
-        if x + y > 1:
-            p = Point(1 - x, 1 - y)
-        else:
-            p = Point(x, y)
-
-        tp = affine_transform(p, transform)
-        return tp
 
 
 class GrayCodeWalls(Environment):
