@@ -242,3 +242,6 @@ ompl/
 
 # project directories with logs/data
 notebooks/data/
+
+# experiment results
+exps/results/*
