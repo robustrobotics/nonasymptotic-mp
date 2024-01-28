@@ -1,7 +1,9 @@
 {
+  "exp_name": "small_run0",
   "n_deltas": 2,
   "n_epsilons": 2,
   "sample_schedule": [10, 100, 1000],
+  "dims_to_test": [2, 3],
   "n_samples_per_check_round": 100,
   "ed_check_timeout": 60.0,
   "area_tol": 1e-8,

@@ -47,6 +47,7 @@ def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
             info_record.append('covered with fewer samples')
 
     # construct dataframe and return
+    len_schedule = len(sample_schedule)
     df_record = pd.DataFrame(
         {
             'n_samples': sample_schedule,
@@ -54,5 +55,10 @@ def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
             'info': info_record,
         }
     )
+
+    df_record['dim'] = dim
+    df_record['delta_clerance'] = delta_clear
+    df_record['epsilon_tolerance'] = epsilon_tol
+    df_record['seed'] = rng_seed
 
     return df_record
