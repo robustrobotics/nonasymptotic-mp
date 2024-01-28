@@ -1,0 +1,11 @@
+{
+  "n_deltas": 2,
+  "n_epsilons": 2,
+  "sample_schedule": [1000000],
+  "dims_to_test": [2],
+  "n_samples_per_check_round": 100,
+  "ed_check_timeout": 300.0,
+  "area_tol": 1e-8,
+  "prm_max_k_neighbors": 4096,
+  "n_trials": 5
+}
