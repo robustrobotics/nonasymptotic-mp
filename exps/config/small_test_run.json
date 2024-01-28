@@ -1,5 +1,4 @@
 {
-  "exp_name": "small_run0",
   "n_deltas": 2,
   "n_epsilons": 2,
   "sample_schedule": [10, 100, 1000],
