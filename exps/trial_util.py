@@ -1,6 +1,7 @@
 from nonasymptotic.envs import StraightLine
 from nonasymptotic.prm import SimplePRM
 
+import time
 import pandas as pd
 import numpy as np
 
@@ -24,6 +25,7 @@ def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
     # lists to save records (we'll form a dataframe afterward)
     ed_complete_record = []
     info_record = []
+    runtimes = []
 
     # run along sample schedule. Once we are ed-complete, we always will be, so we skip the rest when we are.\
     is_ed_complete = False
@@ -32,17 +34,19 @@ def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
         if not is_ed_complete:
             prm.grow_to_n_samples(n_samples)
 
-            # timing data would be useful
-
+            start_t = time.process_time()
             is_ed_complete, info = env.is_prm_epsilon_delta_complete(prm, tol=epsilon_tol,
                                                                      n_samples_per_check=n_samples_per_ed_check_round,
                                                                      timeout=ed_check_timeout,
                                                                      area_tol=area_tol)
+            end_t = time.process_time()
+            runtimes.append(end_t - start_t)
 
             ed_complete_record.append(is_ed_complete)
             info_record.append(info)
 
         else:
+            runtimes.append(np.NaN)
             ed_complete_record.append(True)
             info_record.append('covered with fewer samples')
 
@@ -53,6 +57,7 @@ def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
             'n_samples': sample_schedule,
             'ed_complete': ed_complete_record,
             'info': info_record,
+            'time': runtimes
         }
     )
 
