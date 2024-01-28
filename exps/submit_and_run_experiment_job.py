@@ -18,8 +18,7 @@ echo "My task ID: " $LLSUB_RANK
 echo "Number of Tasks: " $LLSUB_SIZE
 
 
-python run_straight_line_trial.py $LLSUB_RANK $LLSUB_SIZE {0} {1}
-    """
+python run_straight_line_trial.py $LLSUB_RANK $LLSUB_SIZE {0} {1}"""
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
