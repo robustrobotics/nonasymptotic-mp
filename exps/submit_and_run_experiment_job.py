@@ -58,5 +58,5 @@ if __name__ == "__main__":
         submit_script_file.write(submit_script_text)
 
     # submit and queue up the JobArray
-    subprocess.run(['chmod', '+x', submit_script_path])
+    subprocess.run(['chmod', 'u+x', submit_script_path])
     subprocess.run(['LLsub', submit_script_path, '[%i, %i, %i]' % args.triples_args])
