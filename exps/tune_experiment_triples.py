@@ -32,7 +32,7 @@ if __name__ == "__main__":
                 continue
             else:
                 subprocess.run([
-                    "python", "submit_and_run_experiment.py",
+                    "python", "submit_and_run_experiment_job.py",
                     "--name", "triples-tune-%s_%i-%i-%i" % (args.triple_to_test, 1, nppn, args.other_arg_fill_in),
                     "--config-path", "config/triples_tune_run.json",
                     "--triples-args", "1", str(nppn), str(args.other_arg_fill_in)

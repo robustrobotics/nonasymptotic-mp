@@ -20,7 +20,7 @@ def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
     conn_radius = 2 / np.sqrt(1 + epsilon_tol ** 2) * (epsilon_tol + delta_clear)
     env = StraightLine(dim=dim, delta_clearance=delta_clear, seed=rng_seed)
     prm = SimplePRM(conn_radius, env.is_motion_valid, env.sample_from_env, env.distance_to_path,
-                    max_k_connection_neighbors=max_k_connection_neighbors, seed=rng_seed)
+                    max_k_connection_neighbors=max_k_connection_neighbors, seed=rng_seed, verbose=True)
 
     # lists to save records (we'll form a dataframe afterward)
     ed_complete_record = []
@@ -32,8 +32,10 @@ def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
     for n_samples in sample_schedule:
 
         if not is_ed_complete:
+            print('Growing prm to %i samples...' % n_samples)
             prm.grow_to_n_samples(n_samples)
 
+            print('Initiating ed check...')
             start_t = time.process_time()
             is_ed_complete, info = env.is_prm_epsilon_delta_complete(prm, tol=epsilon_tol,
                                                                      n_samples_per_check=n_samples_per_ed_check_round,
@@ -51,6 +53,7 @@ def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
             info_record.append('covered with fewer samples')
 
     # construct dataframe and return
+    print('Recording data and returning trial...')
     len_schedule = len(sample_schedule)
     df_record = pd.DataFrame(
         {

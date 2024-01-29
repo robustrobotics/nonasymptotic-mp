@@ -19,6 +19,7 @@ with open(exp_config_path, 'r') as f:
     config = json.load(f)
 
 # generate the options and select the ones this task will perform
+print('beginning task id %i num_tasks %i' % (task_id, num_tasks))
 
 deltas = np.linspace(0.0, 1.0, num=config['n_deltas'] + 1)[1:]
 epsilons = np.linspace(0.0, 1.0, num=config['n_epsilons'] + 1)[1:]
@@ -41,6 +42,7 @@ all_tasks_record_df = None
 
 
 for _delta, _epsilon, _dim, _trial in tasks:
+    print('initiating delta: %f, epsilon: %f, dim: %f, trial%f' % (_delta, _epsilon, _dim, _trial))
     trial_record_df = straight_line_trial(
         _delta, _epsilon, _dim,
         rng_seed=rng.integers(0, 2 ** 32),
@@ -59,4 +61,4 @@ for _delta, _epsilon, _dim, _trial in tasks:
         all_tasks_record_df = pd.concat([all_tasks_record_df, trial_record_df])
 
     # we output intermediate results just to see progress.
-    all_tasks_record_df.to_csv(os.path.join(exp_save_path, 'out.csv'))
+    all_tasks_record_df.to_csv(os.path.join(exp_save_path, 'out%i.csv' % task_id))
