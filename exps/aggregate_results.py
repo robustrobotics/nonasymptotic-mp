@@ -17,16 +17,20 @@ if __name__ == '__main__':
     exp_dirs.sort(key=os.path.getmtime)
     latest_exp_dir = exp_dirs[-1]
 
-    mini_out_csvs = glob.glob(latest_exp_dir + '/out*.csv' % args.name_prefix)
-    big_out = pd.concat(list(map(pd.read_csv, mini_out_csvs)))
-
-    # time statistics
-    mean = big_out['time'].mean()
-    std = big_out['time'].std()
-
-    print('Trial exec time mean: %f +/- %f' % (mean, std))
+    mini_out_csvs = glob.glob(latest_exp_dir + '/out*.csv')
+    mini_out_dfs = list(map(pd.read_csv, mini_out_csvs))
+    big_out = pd.concat(mini_out_dfs)
 
     if args.df_out_name is not None:
         big_out.to_csv(latest_exp_dir + '/' + args.df_out_name + '_agg_out.csv')
     else:
         big_out.to_csv(latest_exp_dir + '/' + args.name_prefix + '_agg_out.csv')
+
+    # time statistics (exclude first run since that requires jitting)
+    mini_out_dfs_cut = list(map(lambda df: df.drop(index=0), mini_out_dfs))
+    cut_big_out = pd.concat(mini_out_dfs_cut)
+    mean = cut_big_out['time'].mean()
+    std = cut_big_out['time'].std()
+
+    print('Trial exec time mean: %f +/- %f' % (mean, std))
+
