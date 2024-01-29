@@ -20,10 +20,10 @@ if __name__ == "__main__":
             if n_threads * args.other_arg_fill_in > 48:
                 continue
             subprocess.run([
-                "python", "submit_and_run_experiment.py",
-                "--name triples-tune",
-                "--config-path config/triples_tune_run.json",
-                "--triples-args [1, %i, %i]" % (args.other_arg_fill_in, n_threads)
+                "python", "submit_and_run_experiment_job.py",
+                "--name", "triples-tune-%s_%i-%i-%i" % (args.triple_to_test, 1, args.other_arg_fill_in, n_threads),
+                "--config-path", "config/triples_tune_run.json",
+                "--triples-args", "1", str(args.other_arg_fill_in), str(n_threads)
             ])
 
     elif args.triple_to_test == 'nppn':
@@ -33,9 +33,9 @@ if __name__ == "__main__":
             else:
                 subprocess.run([
                     "python", "submit_and_run_experiment.py",
-                    "--name triples-tune",
-                    "--config-path config/triples_tune_run.json",
-                    "--triples-args [1, %i, %i]" % (nppn, args.other_arg_fill_in)
+                    "--name", "triples-tune-%s_%i-%i-%i" % (args.triple_to_test, 1, nppn, args.other_arg_fill_in),
+                    "--config-path", "config/triples_tune_run.json",
+                    "--triples-args", "1", str(nppn), str(args.other_arg_fill_in)
                 ])
     else:
         print('Unknown triple-to-test.')

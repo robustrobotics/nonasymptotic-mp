@@ -6,6 +6,7 @@ from datetime import datetime
 from itertools import product
 import json
 import sys
+import os
 
 now = datetime.now()
 
@@ -58,4 +59,4 @@ for _delta, _epsilon, _dim, _trial in tasks:
         all_tasks_record_df = pd.concat([all_tasks_record_df, trial_record_df])
 
     # we output intermediate results just to see progress.
-    all_tasks_record_df.to_csv(exp_save_path)
+    all_tasks_record_df.to_csv(os.path.join(exp_save_path, 'out.csv'))

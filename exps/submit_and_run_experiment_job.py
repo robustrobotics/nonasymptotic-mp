@@ -16,15 +16,15 @@ module load anaconda/2022b
 
 echo "My task ID: " $LLSUB_RANK
 echo "Number of Tasks: " $LLSUB_SIZE
-
+export PYTHONPATH=$PYTHONPATH:$PWD/../
 
 python run_straight_line_trial.py $LLSUB_RANK $LLSUB_SIZE {0} {1}"""
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--name", type=str, nargs=1, required=True,
+    parser.add_argument("--name", type=str, required=True,
                         help="Name of the experiment.")
-    parser.add_argument("--config-path", type=str, nargs=1, required=True,
+    parser.add_argument("--config-path", type=str, required=True,
                         help="Path to the config file with experiment params.")
     parser.add_argument("--triples-args", type=int, nargs=3, required=True,
                         help="The three integers that dictate the SuperCloud triples configuration "
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     # make experiment directory and copy over config
     now = datetime.now()
     now_str = now.strftime('%Y%m%d-%H%M%S')
-    save_path = "./results/" + args.name + now_str
+    save_path = "./results/" + args.name + '_' + now_str
 
     try:
         os.mkdir(save_path)
@@ -59,4 +59,4 @@ if __name__ == "__main__":
 
     # submit and queue up the JobArray
     subprocess.run(['chmod', 'u+x', submit_script_path])
-    subprocess.run(['LLsub', submit_script_path, '[%i, %i, %i]' % args.triples_args])
+    subprocess.run(['LLsub', submit_script_path, '[%i,%i,%i]' % tuple(args.triples_args)])
