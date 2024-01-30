@@ -18,7 +18,7 @@ if __name__ == '__main__':
     latest_exp_dir = exp_dirs[-1]
 
     mini_out_csvs = glob.glob(latest_exp_dir + '/out*.csv')
-    mini_out_dfs = list(map(pd.read_csv, mini_out_csvs))
+    mini_out_dfs = list(map(lambda p: pd.read_csv(p, index_col=0), mini_out_csvs))
     big_out = pd.concat(mini_out_dfs)
 
     if args.df_out_name is not None:
