@@ -37,9 +37,13 @@ tasks = exp_combos[task_id:len(exp_combos):num_tasks]
 # trying to obtain reproducible randomness
 rng = np.random.default_rng(seed=task_id)
 
-# run the experiments!
-all_tasks_record_df = None
-
+# run the experiments! check to see if an out file already exists and the experiment is resuming.
+df_save_path = os.path.join(exp_save_path, 'out%i.csv' % task_id)
+if os.path.exists(df_save_path):
+    all_tasks_record_df = pd.read_csv(df_save_path, index_col=0)
+    tasks = tasks[all_tasks_record_df.shape[0]:]  # skip ahead if we have completed entries
+else:
+    all_tasks_record_df = None
 
 for _delta, _epsilon, _dim, _trial in tasks:
     print('initiating delta: %f, epsilon: %f, dim: %f, trial%f' % (_delta, _epsilon, _dim, _trial))
@@ -61,4 +65,4 @@ for _delta, _epsilon, _dim, _trial in tasks:
         all_tasks_record_df = pd.concat([all_tasks_record_df, trial_record_df])
 
     # we output intermediate results just to see progress.
-    all_tasks_record_df.to_csv(os.path.join(exp_save_path, 'out%i.csv' % task_id))
+    all_tasks_record_df.to_csv(df_save_path)
