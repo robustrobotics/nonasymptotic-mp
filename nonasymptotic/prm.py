@@ -187,16 +187,6 @@ class SimplePRM:
             prm_sols_in_and_outs
         )
 
-    # def _query_just_over_conn_r(self, queries):
-    #     # DO search using a doubling scheme. At most, complexity is equal to twice * num_samples (still linear)
-    #     # start with current neighbors...
-    #     k = self.k_neighbors
-    #     while True:
-    #         neighb_arr, dist_arr = self.nn_index.query(queries, k=k)
-    #         if k >= self.max_k_neighbors or k >= self.samples.shape[0] or np.all(dist_arr[:, -1] > self.conn_r):
-    #             return neighb_arr, dist_arr
-    #         k *= 2
-
     def _query_samples(self, query):
         # Brute force search on and validity check. We're avoiding the PRM index now.
         dists_from_query = np.linalg.norm(self.samples - query, axis=1)
