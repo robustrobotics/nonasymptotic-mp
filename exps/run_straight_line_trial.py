@@ -21,8 +21,8 @@ with open(exp_config_path, 'r') as f:
 # generate the options and select the ones this task will perform
 print('beginning task id %i num_tasks %i' % (task_id, num_tasks))
 
-deltas = np.linspace(0.0, 1.0, num=config['n_deltas'] + 1)[1:]
-epsilons = np.linspace(0.0, 1.0, num=config['_epsilons'] + 1)[1:]
+deltas = np.linspace(0.0, config['max_delta'], num=config['n_deltas'] + 1)[1:]
+epsilons = np.linspace(0.0, config['max_epsilon'], num=config['n_epsilons'] + 1)[1:]
 
 exp_combos = list(product(
     deltas,

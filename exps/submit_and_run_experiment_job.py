@@ -19,7 +19,7 @@ echo "My task ID: " $LLSUB_RANK
 echo "Number of Tasks: " $LLSUB_SIZE
 export PYTHONPATH=$PYTHONPATH:$PWD/../
 
-python run_straight_line_trial.py $LLSUB_RANK $LLSUB_SIZE {0} {1}"""
+python -u run_straight_line_trial.py $LLSUB_RANK $LLSUB_SIZE {0} {1}"""
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     parser.add_argument("--triples-args", type=int, nargs=3, required=True,
                         help="The three integers that dictate the SuperCloud triples configuration "
                              "[Nodes, N Proc per node, N threads per proc]")
-    parser.add_argument('--resume', type=bool, default=False, action='store_true',
+    parser.add_argument('--resume', default=False, action='store_true',
                         help="Resume the latest experiment of this name (in case we have any early stop)")
     args = parser.parse_args()
 
@@ -74,7 +74,7 @@ if __name__ == "__main__":
             submit_script_file.write(submit_script_text)
 
         # obtain triples args
-        triple_args = args.triple_args
+        triples_args = args.triples_args
 
     else:  # for resuming, we just launch the corresponding script
         try:

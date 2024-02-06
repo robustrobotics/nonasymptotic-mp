@@ -25,7 +25,9 @@ def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
     # lists to save records (we'll form a dataframe afterward)
     ed_complete_record = []
     info_record = []
-    runtimes = []
+    build_runtimes = []
+    check_runtimes = []
+    k_prms = []
 
     # run along sample schedule. Once we are ed-complete, we always will be, so we skip the rest when we are.\
     is_ed_complete = False
@@ -33,7 +35,11 @@ def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
 
         if not is_ed_complete:
             print('Growing prm to %i samples...' % n_samples)
+            start_t = time.process_time()
             prm.grow_to_n_samples(n_samples)
+            end_t = time.process_time()
+            build_runtimes.append(end_t - start_t)
+            print('build time: %f' % build_runtimes[-1])
 
             print('Initiating ed check...')
             start_t = time.process_time()
@@ -42,15 +48,19 @@ def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
                                                                      timeout=ed_check_timeout,
                                                                      area_tol=area_tol)
             end_t = time.process_time()
-            runtimes.append(end_t - start_t)
+            check_runtimes.append(end_t - start_t)
+            print('check time: %f' % check_runtimes[-1])
 
             ed_complete_record.append(is_ed_complete)
             info_record.append(info)
+            k_prms.append(prm.k_neighbors)
 
         else:
-            runtimes.append(np.NaN)
+            build_runtimes.append(np.NaN)
+            check_runtimes.append(np.NaN)
             ed_complete_record.append(True)
             info_record.append('covered with fewer samples')
+            k_prms.append(np.NaN)
 
     # construct dataframe and return
     print('Recording data and returning trial...')
@@ -60,7 +70,9 @@ def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
             'n_samples': sample_schedule,
             'ed_complete': ed_complete_record,
             'info': info_record,
-            'time': runtimes
+            'build_time': build_runtimes,
+            'check_time': check_runtimes,
+            'k_prm': k_prms
         }
     )
 
