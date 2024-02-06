@@ -1,13 +1,11 @@
 {
   "n_deltas": 1,
   "n_epsilons": 1,
-  "max_delta": 0.5,
-  "max_epsilon": 0.5,
-  "sample_schedule": [1000000],
-  "dims_to_test": [10],
+  "sample_schedule": [1000, 10000, 100000],
+  "dims_to_test": [10, 20],
   "n_samples_per_check_round": 100,
   "ed_check_timeout": 60.0,
   "area_tol": 1e-8,
   "prm_max_k_neighbors": 4096,
-  "n_trials": 48
+  "n_trials": 5
 }
