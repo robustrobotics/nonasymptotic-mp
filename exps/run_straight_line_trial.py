@@ -6,14 +6,32 @@ from datetime import datetime
 from itertools import product
 import json
 import sys
+import signal
 import os
-
-now = datetime.now()
 
 task_id = int(sys.argv[1])
 num_tasks = int(sys.argv[2])
 exp_config_path = str(sys.argv[3])
 exp_save_path = str(sys.argv[4])
+
+
+# set up some basic signal catchers for debugging
+def handler(signum, frame):
+    sig_now = datetime.now()
+    sig_now_str = sig_now.strftime('%H%M%S')
+    if signum == signal.SIGBUS:
+        print('[%s] Nonasymptotic signal handler: Bad memory access!' % sig_now_str)
+    elif signum == signal.SIGSEGV:
+        print('[%s] Nonasymptotic signal handler: Segfault!' % sig_now_str)
+    elif signum == signal.SIGTERM:
+        print('[%s] Nonasymptotic signal handler: Termination!' % sig_now_str)
+    else:
+        print('[%s] Nonasympotic signal handler: called with signal %d' % (sig_now_str, signum))
+
+
+signal.signal(signal.SIGBUS, handler)
+signal.signal(signal.SIGSEGV, handler)
+signal.signal(signal.SIGTERM, handler)
 
 with open(exp_config_path, 'r') as f:
     config = json.load(f)

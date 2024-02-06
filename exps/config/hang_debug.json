@@ -1,6 +1,8 @@
 {
   "n_deltas": 1,
   "n_epsilons": 1,
+  "max_delta": 1.0,
+  "max_epsilon": 1.0,
   "sample_schedule": [1000, 10000, 100000],
   "dims_to_test": [10, 20],
   "n_samples_per_check_round": 100,
