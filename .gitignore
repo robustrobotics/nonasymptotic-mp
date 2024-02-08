@@ -245,3 +245,6 @@ notebooks/data/
 
 # experiment results
 exps/results/*
+
+# debugging efforts
+debug/
