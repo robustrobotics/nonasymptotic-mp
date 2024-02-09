@@ -4,7 +4,6 @@ from networkit.graphtools import GraphTools
 import numpy as np
 import pynndescent as pynn
 import networkit as nk
-import networkx as nx
 
 
 class SimplePRM:
@@ -40,8 +39,8 @@ class SimplePRM:
                 nn_index = pynn.NNDescent(samples,
                                           n_neighbors=self.k_neighbors,
                                           random_state=self.rng_seed,
-                                          diversify_prob=0.0,      # prune no edges, since we're not searching.
-                                          pruning_degree_multiplier=1.0, # keep node degree same as n_neighbord
+                                          diversify_prob=0.0,  # prune no edges, since we're not searching.
+                                          pruning_degree_multiplier=1.0,  # keep node degree same as n_neighbord
                                           verbose=self.verbose)  # Euclidean metric is default
                 _, index_dists = nn_index.neighbor_graph
 
@@ -55,23 +54,32 @@ class SimplePRM:
                 self.k_neighbors *= 2
 
         def _nn_edge_list_and_dist_list_to_nk_prm_graph(_edge_arr, _dist_arr, include_starting=0):
-            rows = np.arange(include_starting, n_samples).repeat(self.k_neighbors)
-            cols = _edge_arr[include_starting:, :].flatten(order='C')
-            data = _dist_arr[include_starting:, :].flatten(order='C')
+            starts = np.arange(include_starting, n_samples).repeat(self.k_neighbors)
+            goals = _edge_arr[include_starting:, :].flatten(order='C')
+            dists = _dist_arr[include_starting:, :].flatten(order='C')
+            within_conn_r = dists <= self.conn_r
+
+            starts_within_conn_r, goals_within_conn_r, dists_within_conn_r = (starts[within_conn_r],
+                                                                              goals[within_conn_r],
+                                                                              dists[within_conn_r])
 
             # check valid motions and connectivity
-            valid_motions = self.check_motion(self.samples[rows], self.samples[cols]) & (data <= self.conn_r)
+            valid_motions = self.check_motion(self.samples[starts_within_conn_r],
+                                              self.samples[goals_within_conn_r])
 
-            # then filter for valid connections and construct graph by way of networkx since networkit does not
-            # support adjacency matrix construction in Python :(
-            gx = nx.from_scipy_sparse_array(
-                sparse.coo_array(
-                    (data[valid_motions], (rows[valid_motions], cols[valid_motions])),
-                    shape=(n_samples, n_samples)
+            new_graph = nk.graph.GraphFromCoo(
+                (
+                    dists_within_conn_r[valid_motions],
+                    (starts_within_conn_r[valid_motions], goals_within_conn_r[valid_motions])
                 ),
-                edge_attribute='distance'
+                n=n_samples,
+                weighted=True,
+                directed=False
             )
-            return nk.nxadapter.nx2nk(gx, weightAttr='distance')
+
+            new_graph.removeMultiEdges()
+            return new_graph
+
 
         # sample new states
         if self.samples is None:  # if new, initialize everything
