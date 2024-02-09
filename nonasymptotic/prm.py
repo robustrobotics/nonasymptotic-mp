@@ -9,7 +9,7 @@ import networkx as nx
 
 class SimplePRM:
     def __init__(self, connection_rad, motion_validity_checker, valid_state_sampler, sdf_to_path,
-                 max_k_connection_neighbors=2048, seed=None, verbose=False):
+                 max_k_connection_neighbors=512, seed=None, verbose=False):
         self.d = valid_state_sampler().size  # dummy sample to compute dimension
 
         self.conn_r = connection_rad

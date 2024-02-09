@@ -17,7 +17,7 @@ def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
         sample_schedule = [10, 100, 1000]
 
     # set up experiment objs
-    conn_radius = 2 * (epsilon_tol + delta_clear) / np.sqrt(1 + epsilon_tol ** 2)
+    conn_radius = 2 * (1 + epsilon_tol) * delta_clear / np.sqrt(1 + epsilon_tol ** 2)
     env = StraightLine(dim=dim, delta_clearance=delta_clear, seed=rng_seed)
     prm = SimplePRM(conn_radius, env.is_motion_valid, env.sample_from_env, env.distance_to_path,
                     max_k_connection_neighbors=max_k_connection_neighbors, seed=rng_seed, verbose=True)
