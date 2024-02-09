@@ -1,10 +1,17 @@
 from nonasymptotic.envs import StraightLine
-from nonasymptotic.prm import SimplePRM
+from nonasymptotic.prm import SimpleRadiusPRM
 
 import time
 import pandas as pd
 import numpy as np
 
+
+# TODO: modify straight_line_trial to
+# accept a resolution of epsilons we are interested in
+# binary search down an ordering of the nearest neighbors until we find the neighbor we lose epsilon-delta optimal
+# (or at least be sensitive to timeouts to have a gray zone)
+# then report back the epsilon gray-zone between the node that must be included in the next NN dist down as the
+# table entry, along with info.
 
 def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
                         sample_schedule=None,
@@ -19,8 +26,8 @@ def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
     # set up experiment objs
     conn_radius = 2 * (1 + epsilon_tol) * delta_clear / np.sqrt(1 + epsilon_tol ** 2)
     env = StraightLine(dim=dim, delta_clearance=delta_clear, seed=rng_seed)
-    prm = SimplePRM(conn_radius, env.is_motion_valid, env.sample_from_env, env.distance_to_path,
-                    max_k_connection_neighbors=max_k_connection_neighbors, seed=rng_seed, verbose=True)
+    prm = SimpleRadiusPRM(conn_radius, env.is_motion_valid, env.sample_from_env, env.distance_to_path,
+                          max_k_connection_neighbors=max_k_connection_neighbors, seed=rng_seed, verbose=True)
 
     # lists to save records (we'll form a dataframe afterward)
     ed_complete_record = []

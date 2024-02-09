@@ -1,5 +1,5 @@
 from nonasymptotic.envs import GrayCodeWalls, MidCuboidRegions, EndCuboidRegions, StraightLine
-from nonasymptotic.prm import SimplePRM
+from nonasymptotic.prm import SimpleRadiusPRM
 
 from sympy.combinatorics.graycode import GrayCode
 import networkx as nx
@@ -524,7 +524,7 @@ class TestEpsilonDeltaCompletePropertyTest:
 
     def test_timeout(self):
         env = StraightLine(dim=2, delta_clearance=0.5)
-        prm = SimplePRM(0.1, env.is_motion_valid, env.sample_from_env, env.distance_to_path)
+        prm = SimpleRadiusPRM(0.1, env.is_motion_valid, env.sample_from_env, env.distance_to_path)
         prm.grow_to_n_samples(10000)
 
         is_complete = env.is_prm_epsilon_delta_complete(prm, 0.75, n_samples_per_check=500, timeout=60)

@@ -1,14 +1,120 @@
-from scipy import sparse
 from networkit.graphtools import GraphTools
+from abc import ABC, abstractmethod
 
 import numpy as np
 import pynndescent as pynn
 import networkit as nk
 
 
-class SimplePRM:
+# TODO:
+# create a PRM superclass that has the same query methods, and then subclass with a different constructor that will
+# build a k-nearest neighbor graph and then binary search down the radius.
+
+# create abstract properties that need to be implemented as the standard names of things
+
+class SimplePRM(ABC):
+    def __init__(self, seed, verbose):
+        self.rng_seed = seed
+        self.verbose = verbose
+
+    @abstractmethod
+    def grow_to_n_samples(self, n_samples):
+        pass
+
+    @abstractmethod
+    def num_vertices(self):
+        pass
+
+    @abstractmethod
+    def num_edges(self):
+        pass
+
+    @abstractmethod
+    def reset(self):
+        pass
+
+    @abstractmethod
+    def save(self, filepath):
+        pass
+
+    @abstractmethod
+    def _query_samples(self, query):
+        pass
+
+    @abstractmethod
+    def _distance_in_graph(self, starts, goals):
+        pass
+
+    @property
+    @abstractmethod
+    def prm_graph(self) -> nk.Graph:
+        pass
+
+    @property
+    @abstractmethod
+    def prm_samples(self) -> np.ndarray:
+        pass
+
+    def query_best_solution(self, start, goal):
+        # NOTE: if there isn't a solution... will return an infinite distance. This is
+        # just a quirk of networkit that we just need to work around.
+
+        # Returned path is excluding the endpoints
+        # first, loop start and goal into graph
+        start_nns_ids, start_nns_dists = self._query_samples(start)
+        goal_nns_ids, goal_nns_dists = self._query_samples(goal)
+
+        i_goal = self.prm_graph.addNodes(2)
+        i_start = i_goal - 1
+
+        # adding edge locally in a loop is faster than coming up with a big sparse
+        # adjacency matrix and merging a converted graph in.
+        for s_neighbor, d_sn in zip(start_nns_ids, start_nns_dists):
+            self.prm_graph.addEdge(i_start, s_neighbor, w=d_sn)
+
+        for g_neighbor, d_gn in zip(goal_nns_ids, goal_nns_dists):
+            self.prm_graph.addEdge(i_goal, g_neighbor, w=d_gn)
+
+        biDij = nk.distance.BidirectionalDijkstra(self.prm_graph, i_start, i_goal)
+        biDij.run()
+
+        sol_dist = biDij.getDistance()
+        sol_path = self.prm_samples[biDij.getPath()]
+
+        # delete start/goal from graph for next query
+        self.prm_graph.removeNode(i_start)
+        self.prm_graph.removeNode(i_goal)
+
+        return sol_dist, sol_path
+
+    def query_all_graph_connections(self, start, goal):
+        # returns a N_pairs X 2 X dim array consisting of enter/exit points in the prm graph
+        # and an N_pairs vector consisting of the distances between the enter and exit points in the prm
+        start_nns_ids, _ = self._query_samples(start)
+        goal_nns_ids, _ = self._query_samples(goal)
+
+        # use advanced indexing
+        prm_sols_in_and_outs = np.transpose([
+            np.tile(start_nns_ids, len(goal_nns_ids)),
+            np.repeat(goal_nns_ids, len(start_nns_ids))
+        ])
+
+        prm_sols_distances = self._distance_in_graph(prm_sols_in_and_outs[:, 0], prm_sols_in_and_outs[:, 1])
+
+        return (
+            np.stack([
+                self.prm_samples[prm_sols_in_and_outs[:, 0]],
+                self.prm_samples[prm_sols_in_and_outs[:, 1]]
+            ], axis=0).swapaxes(0, 1),
+            prm_sols_distances,
+            prm_sols_in_and_outs
+        )
+
+
+class SimpleRadiusPRM(SimplePRM):
     def __init__(self, connection_rad, motion_validity_checker, valid_state_sampler, sdf_to_path,
                  max_k_connection_neighbors=512, seed=None, verbose=False):
+        super().__init__(seed, verbose)
         self.d = valid_state_sampler().size  # dummy sample to compute dimension
 
         self.conn_r = connection_rad
@@ -19,18 +125,16 @@ class SimplePRM:
         self.sample_state = valid_state_sampler
         self.dist_points_to_path = sdf_to_path
 
-        self.samples = None
         self.nn_index = None
-
-        self.g_prm = None
-        self.g_cc = None
         self.g_sp_lookup = None
         self.sample_to_lookup_ind = None
 
-        self.rng_seed = seed
-        self.verbose = verbose
-
         self.GT = GraphTools()
+
+        # these are attributes that are accessed by properties for code-sharing inheritance/niceness,
+        # so they are underscored.
+        self._samples = None
+        self._g_prm = None
 
     def grow_to_n_samples(self, n_samples):
 
@@ -64,37 +168,41 @@ class SimplePRM:
                                                                               dists[within_conn_r])
 
             # check valid motions and connectivity
-            valid_motions = self.check_motion(self.samples[starts_within_conn_r],
-                                              self.samples[goals_within_conn_r])
+            valid_motions = self.check_motion(self._samples[starts_within_conn_r],
+                                              self._samples[goals_within_conn_r])
 
-            new_graph = nk.graph.GraphFromCoo(
-                (
-                    dists_within_conn_r[valid_motions],
-                    (starts_within_conn_r[valid_motions], goals_within_conn_r[valid_motions])
-                ),
-                n=n_samples,
-                weighted=True,
-                directed=False
-            )
+            # it appears that the graph construction is still buggy (segfaults often)
+            # but networkx also just constructs graphs with for loops, so this isn't slower
+            # TODO: file a git issue
+            new_graph = nk.Graph(n_samples, weighted=True)
+            # new_graph.addEdges(
+            #     (
+            #         dists_within_conn_r[valid_motions],
+            #         (starts_within_conn_r[valid_motions], goals_within_conn_r[valid_motions])
+            #     ),
+            #     checkMultiEdge=True
+            # )
+            for dist, start, goal in zip(dists_within_conn_r[valid_motions],
+                                         starts_within_conn_r[valid_motions],
+                                         goals_within_conn_r[valid_motions]):
+                new_graph.addEdge(start, goal, w=dist, checkMultiEdge=True)
 
-            new_graph.removeMultiEdges()
             return new_graph
 
-
         # sample new states
-        if self.samples is None:  # if new, initialize everything
-            self.samples = np.zeros((n_samples, self.d))
+        if self._samples is None:  # if new, initialize everything
+            self._samples = np.zeros((n_samples, self.d))
 
             for i in range(n_samples):
-                self.samples[i, :] = self.sample_state()
+                self._samples[i, :] = self.sample_state()
 
             # apply a doubling scheme for connection neighbors to obtain the threshold graph
-            self.nn_index = _build_threshold_index(self.samples)
+            self.nn_index = _build_threshold_index(self._samples)
             adj_arr, dists_arr = self.nn_index.neighbor_graph
-            self.g_prm = _nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr)
+            self._g_prm = _nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr)
 
         else:  # otherwise, we reuse past computation
-            past_n_samples = self.samples.shape[0]
+            past_n_samples = self._samples.shape[0]
             m_new_samples = n_samples - past_n_samples
             new_samples = np.zeros((m_new_samples, self.d))
 
@@ -102,29 +210,26 @@ class SimplePRM:
                 new_samples[i, :] = self.sample_state()
 
             self.nn_index.update(xs_fresh=new_samples)
-            self.samples = np.concatenate([self.samples, new_samples])
+            self._samples = np.concatenate([self._samples, new_samples])
 
             # check to make sure we are still within threshold. if not, we need to build a new graph with
             # new neighbors
             adj_arr, dists_arr = self.nn_index.neighbor_graph
             if np.all(dists_arr[:, -1] > self.conn_r) or self.k_neighbors >= self.max_k_neighbors:
-                self.g_prm.addNodes(m_new_samples)
+                self.prm_graph.addNodes(m_new_samples)
                 g_new_conns = _nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr,
                                                                           include_starting=past_n_samples)
-                self.GT.merge(self.g_prm, g_new_conns)
+                self.GT.merge(self._g_prm, g_new_conns)
 
             else:
                 self.k_neighbors *= 2  # a bit hacky, but a way to make sure we don't recompute the graph at the same K
-                self.nn_index = _build_threshold_index(self.samples)
+                self.nn_index = _build_threshold_index(self.prm_samples)
                 adj_arr, dists_arr = self.nn_index.neighbor_graph
-                self.g_prm = _nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr)
+                self._g_prm = _nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr)
 
-        self.g_cc = nk.components.ConnectedComponents(self.g_prm)
-        self.g_cc.run()
-
-        dist_samples_to_line = self.dist_points_to_path(self.samples)
+        dist_samples_to_line = self.dist_points_to_path(self._samples)
         samples_within_conn_r = np.arange(n_samples)[dist_samples_to_line <= self.conn_r]
-        spsp = nk.distance.SPSP(self.g_prm, samples_within_conn_r)
+        spsp = nk.distance.SPSP(self._g_prm, samples_within_conn_r)
         spsp.setTargets(samples_within_conn_r)
         spsp.run()
         self.g_sp_lookup = spsp.getDistances(asarray=True)
@@ -136,107 +241,61 @@ class SimplePRM:
 
         # self.g_spsp = spsp
 
-    def query_best_solution(self, start, goal):
-        # NOTE: if there isn't a solution... will return an infinite distance. This is
-        # just a quirk of networkit that we just need to work around.
-
-        # Returned path is excluding the endpoints
-        # first, loop start and goal into graph
-        start_nns_ids, start_nns_dists = self._query_samples(start)
-        goal_nns_ids, goal_nns_dists = self._query_samples(goal)
-
-        i_goal = self.g_prm.addNodes(2)
-        i_start = i_goal - 1
-
-        # adding edge locally in a loop is faster than coming up with a big sparse
-        # adjacency matrix and merging a converted graph in.
-        for s_neighbor, d_sn in zip(start_nns_ids, start_nns_dists):
-            self.g_prm.addEdge(i_start, s_neighbor, w=d_sn)
-
-        for g_neighbor, d_gn in zip(goal_nns_ids, goal_nns_dists):
-            self.g_prm.addEdge(i_goal, g_neighbor, w=d_gn)
-
-        biDij = nk.distance.BidirectionalDijkstra(self.g_prm, i_start, i_goal)
-        biDij.run()
-
-        sol_dist = biDij.getDistance()
-        sol_path = self.samples[biDij.getPath()]
-
-        # delete start/goal from graph for next query
-        self.g_prm.removeNode(i_start)
-        self.g_prm.removeNode(i_goal)
-
-        return sol_dist, sol_path
-
-    def query_all_graph_connections(self, start, goal):
-
-        # returns a N_pairs X 2 X dim array consisting of enter/exit points in the prm graph
-        # and an N_pairs vector consisting of the distances between the enter and exit points in the prm
-        start_nns_ids, _ = self._query_samples(start)
-        goal_nns_ids, _ = self._query_samples(goal)
-
-        # use advanced indexing
-        prm_sols_in_and_outs = np.transpose([
-            np.tile(start_nns_ids, len(goal_nns_ids)),
-            np.repeat(goal_nns_ids, len(start_nns_ids))
-        ])
-
-        prm_sols_distances = self.g_sp_lookup[
-            self.sample_to_lookup_ind[prm_sols_in_and_outs[:, 0]],
-            self.sample_to_lookup_ind[prm_sols_in_and_outs[:, 1]]
-        ]
-
-        return (
-            np.stack([
-                self.samples[prm_sols_in_and_outs[:, 0]],
-                self.samples[prm_sols_in_and_outs[:, 1]]
-            ], axis=0).swapaxes(0, 1),
-            prm_sols_distances,
-            prm_sols_in_and_outs
-        )
-
     def _query_samples(self, query):
         # Brute force search on and validity check. We're avoiding the PRM index now.
-        dists_from_query = np.linalg.norm(self.samples - query, axis=1)
+        dists_from_query = np.linalg.norm(self.prm_samples - query, axis=1)
         within_conn_r = dists_from_query <= self.conn_r
 
-        points_within_conn_r = self.samples[within_conn_r]
-        ids_within_conn_r = np.arange(self.samples.shape[0])[within_conn_r]
+        points_within_conn_r = self.prm_samples[within_conn_r]
+        ids_within_conn_r = np.arange(self.prm_samples.shape[0])[within_conn_r]
 
         valid_motions = self.check_motion(
             np.tile(query, (points_within_conn_r.shape[0], 1)),
             points_within_conn_r)
         return ids_within_conn_r[valid_motions], dists_from_query[within_conn_r][valid_motions]
 
+    def _distance_in_graph(self, starts, goals):
+        return self.g_sp_lookup[
+            self.sample_to_lookup_ind[starts],
+            self.sample_to_lookup_ind[goals]
+        ]
+
     def num_vertices(self):
-        return self.g_prm.numberOfNodes() if self.g_prm is not None else 0
+        return self.prm_graph.numberOfNodes() if self.prm_graph is not None else 0
 
     def num_edges(self):
-        return self.g_prm.numberOfEdges() if self.g_prm is not None else 0
+        return self.prm_graph.numberOfEdges() if self.prm_graph is not None else 0
 
     def reset(self):
-        self.g_prm = None
-        self.g_cc = None
-        self.samples = None
+        self._g_prm = None
+        self._samples = None
         self.nn_index = None
 
     def save(self, filepath):
         """
         :param filepath: file directory (without extension, since multiple files need to be saved)
         """
-        if self.g_prm is not None:
-            nk.writeGraph(self.g_prm, filepath + '.nkb', nk.Format.NetworkitBinary)
+        if self.prm_graph is not None:
+            nk.writeGraph(self.prm_graph, filepath + '.nkb', nk.Format.NetworkitBinary)
         else:
             raise RuntimeWarning('Tried to save an uninitialized PRM.')
 
-        if self.samples is not None:
-            np.save(filepath + '.npy', self.samples)
+        if self.prm_samples is not None:
+            np.save(filepath + '.npy', self.prm_samples)
+
+    @property
+    def prm_graph(self) -> nk.Graph:
+        return self._g_prm
+
+    @property
+    def prm_samples(self) -> np.ndarray:
+        return self._samples
 
 
 if __name__ == '__main__':
     from envs import GrayCodeWalls
 
     walls = GrayCodeWalls(2, 2, 0.1)
-    prm = SimplePRM(0.2, walls.is_motion_valid, walls.sample_from_env)
+    prm = SimpleRadiusPRM(0.2, walls.is_motion_valid, walls.sample_from_env)
     prm.grow_to_n_samples(1000)
     print('hi')

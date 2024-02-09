@@ -2,7 +2,6 @@ from exps.trial_util import straight_line_trial
 import numpy as np
 import pandas as pd
 
-from datetime import datetime
 from itertools import product
 import json
 import sys
@@ -13,6 +12,7 @@ num_tasks = int(sys.argv[2])
 exp_config_path = str(sys.argv[3])
 exp_save_path = str(sys.argv[4])
 
+# TODO: adapt signature to new straight-line test and necessary configs too
 
 with open(exp_config_path, 'r') as f:
     config = json.load(f)
