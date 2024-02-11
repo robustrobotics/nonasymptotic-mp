@@ -205,27 +205,31 @@ class StraightLine(Environment):
 
                     if inner_approx_open.covers(Point(query_point)):
                         cvx_hull = inner_approx_open.intersection(conn_r_bounding_box)
-                        # plt.figure()
-                        # fig, ax = plt.subplots()
-                        # plot_polygon(conn_r_bounding_box, ax, color='green')
-                        # plot_polygon(inner_approx_open.intersection(conn_r_bounding_box), color='purple')
-                        # plt.show()
+
+                        # if vis:
+                        #     plt.figure()
+                        #     fig, ax = plt.subplots()
+                        #     plot_polygon(conn_r_bounding_box, ax, color='green')
+                        #     plot_polygon(inner_approx_open.intersection(conn_r_bounding_box), ax, color='purple')
+                        #     plt.show()
 
                     else:
                         # the query point + its shadow
                         query_shadow = Polygon([query_point, query_point + ray_slope1, query_point + ray_slope2])
                         cvx_hull = inner_approx_open.union(query_shadow).intersection(conn_r_bounding_box).convex_hull
-                        # plt.figure()
-                        # fig, ax = plt.subplots()
-                        # plot_polygon(conn_r_bounding_box, ax, color='green')
-                        # plot_polygon(query_shadow.intersection(conn_r_bounding_box), color='red')
-                        # plot_polygon(inner_approx_open.intersection(conn_r_bounding_box), color='purple')
-                        # plt.show()
+
+                        # if vis:
+                        #     plt.figure()
+                        #     fig, ax = plt.subplots()
+                        #     plot_polygon(conn_r_bounding_box, ax, color='green')
+                        #     plot_polygon(query_shadow.intersection(conn_r_bounding_box), ax, color='red')
+                        #     plot_polygon(inner_approx_open.intersection(conn_r_bounding_box), ax, color='purple')
+                        #     plt.show()
 
                 prm_points_to_cvx_hull[id_io] = (cvx_hull, conn_r_bounding_box)
                 _new_cover_sets.append(cvx_hull)
 
-                return _new_cover_sets
+            return _new_cover_sets
 
         def _process_query(query_point):
             # returns True if successfully queried, False if the PRM does not support the query with
@@ -302,9 +306,11 @@ class StraightLine(Environment):
                 new_cover_sets_union = unary_union(new_cover_sets)
 
                 try:
-                    new_cover_pts_coords = np.array(
-                        new_cover_sets_union.intersection(length_space_to_cover).boundary.coords
-                    )[:-1]  # last point repeats the first
+                    new_coverage = new_cover_sets_union.intersection(length_space_to_cover)
+                    if not isinstance(new_coverage, Polygon):
+                        continue
+
+                    new_cover_pts_coords = np.array(new_coverage.boundary.coords)[:-1]  # last point and first are the same
                     new_cover_points = np.array(list(
                         map(lambda cds: Point(cds), new_cover_pts_coords)
                     ))
@@ -324,6 +330,13 @@ class StraightLine(Environment):
                     # here, we catch the error if we query a new point but it doesn't grow the
                     # current coverage area at all.
                     continue
+
+                if vis:
+                    plt.figure()
+                    plot_polygon(length_space_to_cover, color='red')
+                    plot_polygon(cover_union, color='blue')
+                    plt.show()
+
 
             # continue until timeout (where we confirm or deny? decide). or if we're covered return true
             # or if we don't have an admissible solution, return false.

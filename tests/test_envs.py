@@ -522,10 +522,23 @@ class TestGrayCodeEnvMotionValidityChecker:
 
 class TestEpsilonDeltaCompletePropertyTest:
 
-    def test_timeout(self):
-        env = StraightLine(dim=2, delta_clearance=0.5)
-        prm = SimpleRadiusPRM(0.1, env.is_motion_valid, env.sample_from_env, env.distance_to_path)
-        prm.grow_to_n_samples(10000)
+    def test_consistent_readings(self):
+        env = StraightLine(dim=2, delta_clearance=0.5, seed=1)
 
-        is_complete = env.is_prm_epsilon_delta_complete(prm, 0.75, n_samples_per_check=500, timeout=60)
-        assert is_complete
+        prm = SimpleRadiusPRM(0.1, env.is_motion_valid, env.sample_from_env, env.distance_to_path, seed=1)
+        prm.grow_to_n_samples(1000)
+        completes = []
+
+        for _ in range(100):
+            is_complete, _ = env.is_prm_epsilon_delta_complete(prm, 0.25, n_samples_per_check=100, timeout=60)
+            completes.append(is_complete)
+
+        assert np.all(np.array(completes)) or np.all(~np.array(completes))
+
+    def test_timeout(self):
+        env = StraightLine(dim=2, delta_clearance=0.5, seed=1)
+        prm = SimpleRadiusPRM(0.1, env.is_motion_valid, env.sample_from_env, env.distance_to_path, seed=1)
+        prm.grow_to_n_samples(1000)
+
+        is_complete, info = env.is_prm_epsilon_delta_complete(prm, 0.22, n_samples_per_check=100, timeout=0.1)
+        assert info == 'timed out'
