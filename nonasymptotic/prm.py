@@ -13,7 +13,10 @@ import networkit as nk
 # create abstract properties that need to be implemented as the standard names of things
 
 class SimplePRM(ABC):
-    def __init__(self, seed, verbose):
+    def __init__(self, motion_validity_checker, valid_state_sampler, seed, verbose):
+        self.check_motion = motion_validity_checker
+        self.sample_state = valid_state_sampler
+
         self.rng_seed = seed
         self.verbose = verbose
 
@@ -110,19 +113,142 @@ class SimplePRM(ABC):
             prm_sols_in_and_outs
         )
 
+    def _nn_edge_list_and_dist_list_to_nk_prm_graph(self, _edge_arr, _dist_arr,
+                                                    include_starting=0, threshold_rad=np.inf):
+        """
+        :param _edge_arr: edge array where ith index lists the indices of neighbors
+        :param _dist_arr: corresponding weighting array
+        :param include_starting: only connect vertices starting at include_starting's index.
+                                 helpful to only add new edges.
+        :param threshold_rad: optional threshold radius. include edges only if weight is less than threshold_rad.
+        :return: corresponding Networkit graph.
+        """
+        n_samples = _edge_arr.shape[0]
+        k_neighbors = _edge_arr.shape[1]
+
+        starts = np.arange(include_starting, n_samples).repeat(k_neighbors)
+        goals = _edge_arr[include_starting:, :].flatten(order='C')
+        dists = _dist_arr[include_starting:, :].flatten(order='C')
+
+        within_conn_r = dists <= threshold_rad
+
+        starts_within_conn_r, goals_within_conn_r, dists_within_conn_r = (starts[within_conn_r],
+                                                                          goals[within_conn_r],
+                                                                          dists[within_conn_r])
+
+        # check valid motions and connectivity
+        valid_motions = self.check_motion(self.prm_samples[starts_within_conn_r],
+                                          self.prm_samples[goals_within_conn_r])
+
+        # it appears that the graph construction is still buggy (segfaults often)
+        # but networkx also just constructs graphs with for loops, so this isn't slower
+        # TODO: file a git issue
+        new_graph = nk.Graph(n_samples, weighted=True)
+        # new_graph.addEdges(
+        #     (
+        #         dists_within_conn_r[valid_motions],
+        #         (starts_within_conn_r[valid_motions], goals_within_conn_r[valid_motions])
+        #     ),
+        #     checkMultiEdge=True
+        # )
+        for dist, start, goal in zip(dists_within_conn_r[valid_motions],
+                                     starts_within_conn_r[valid_motions],
+                                     goals_within_conn_r[valid_motions]):
+            new_graph.addEdge(start, goal, w=dist, checkMultiEdge=True)
+
+        return new_graph
+
+
+class SimpleNearestNeighborPRM(SimplePRM):
+    """
+    A K-NN PRM, but with an optional threshold_radius as a cutoff. For us, the experiments turned out to be
+    more elegant if we took a full K-NN (as PyNNDescent would compute it) and then find the radius
+    where epsilon-delta completeness checks fail.
+    """
+
+    def __init__(self, k_neighbors, motion_validity_checker, valid_state_sampler, sdf_to_path,
+                 connection_radius=None, seed=None, verbose=False):
+        super().__init__(motion_validity_checker, valid_state_sampler, seed, verbose)
+
+        self.d = valid_state_sampler().size
+        self.k_neighbors = k_neighbors
+        self.conn_r = connection_radius
+
+        self.dist_points_to_path = sdf_to_path
+
+        self.nn_index = None
+        self.g_sp_lookup = None
+        self.sample_to_lookup_ind = None
+
+        self._samples = None
+        self._g_prm = None
+
+    def grow_to_n_samples(self, n_samples):
+
+        if self._samples is None:  # if new, initialize everything
+            self._samples = np.zeros((n_samples, self.d))
+
+            for i in range(n_samples):
+                self._samples[i, :] = self.sample_state()
+
+            # build the index
+            self.nn_index = pynn.NNDescent(self._samples,
+                                           n_neighbors=self.k_neighbors,
+                                           random_state=self.rng_seed,
+                                           diversify_prob=0.0,
+                                           pruning_degree_multiplier=1.0,
+                                           verbose=self.verbose)
+
+            # build the master graph
+            edges, dists = self.nn_index.neighbor_graph
+            master_graph = self._nn_edge_list_and_dist_list_to_nk_prm_graph(edges, dists)
+        else:
+            #TODO
+            pass
+
+    def set_connection_radius(self, connection_radius):
+        pass
+
+    def get_sorted_nn_distances(self):
+        pass
+
+    def num_vertices(self):
+        pass
+
+    def num_edges(self):
+        pass
+
+    def reset(self):
+        pass
+
+    def save(self, filepath):
+        pass
+
+    def _query_samples(self, query):
+        pass
+
+    def _distance_in_graph(self, starts, goals):
+        pass
+
+    @property
+    def prm_graph(self) -> nk.Graph:
+        pass
+
+    @property
+    def prm_samples(self) -> np.ndarray:
+        pass
+
 
 class SimpleRadiusPRM(SimplePRM):
     def __init__(self, connection_rad, motion_validity_checker, valid_state_sampler, sdf_to_path,
                  max_k_connection_neighbors=512, seed=None, verbose=False):
-        super().__init__(seed, verbose)
+        super().__init__(motion_validity_checker, valid_state_sampler, seed, verbose)
         self.d = valid_state_sampler().size  # dummy sample to compute dimension
 
         self.conn_r = connection_rad
         self.k_neighbors = 16
         self.max_k_neighbors = max_k_connection_neighbors
 
-        self.check_motion = motion_validity_checker
-        self.sample_state = valid_state_sampler
         self.dist_points_to_path = sdf_to_path
 
         self.nn_index = None
@@ -144,7 +270,7 @@ class SimpleRadiusPRM(SimplePRM):
                                           n_neighbors=self.k_neighbors,
                                           random_state=self.rng_seed,
                                           diversify_prob=0.0,  # prune no edges, since we're not searching.
-                                          pruning_degree_multiplier=1.0,  # keep node degree same as n_neighbord
+                                          pruning_degree_multiplier=1.0,  # keep node degree same as n_neighbor
                                           verbose=self.verbose)  # Euclidean metric is default
                 _, index_dists = nn_index.neighbor_graph
 
@@ -157,38 +283,6 @@ class SimpleRadiusPRM(SimplePRM):
 
                 self.k_neighbors *= 2
 
-        def _nn_edge_list_and_dist_list_to_nk_prm_graph(_edge_arr, _dist_arr, include_starting=0):
-            starts = np.arange(include_starting, n_samples).repeat(self.k_neighbors)
-            goals = _edge_arr[include_starting:, :].flatten(order='C')
-            dists = _dist_arr[include_starting:, :].flatten(order='C')
-            within_conn_r = dists <= self.conn_r
-
-            starts_within_conn_r, goals_within_conn_r, dists_within_conn_r = (starts[within_conn_r],
-                                                                              goals[within_conn_r],
-                                                                              dists[within_conn_r])
-
-            # check valid motions and connectivity
-            valid_motions = self.check_motion(self._samples[starts_within_conn_r],
-                                              self._samples[goals_within_conn_r])
-
-            # it appears that the graph construction is still buggy (segfaults often)
-            # but networkx also just constructs graphs with for loops, so this isn't slower
-            # TODO: file a git issue
-            new_graph = nk.Graph(n_samples, weighted=True)
-            # new_graph.addEdges(
-            #     (
-            #         dists_within_conn_r[valid_motions],
-            #         (starts_within_conn_r[valid_motions], goals_within_conn_r[valid_motions])
-            #     ),
-            #     checkMultiEdge=True
-            # )
-            for dist, start, goal in zip(dists_within_conn_r[valid_motions],
-                                         starts_within_conn_r[valid_motions],
-                                         goals_within_conn_r[valid_motions]):
-                new_graph.addEdge(start, goal, w=dist, checkMultiEdge=True)
-
-            return new_graph
-
         # sample new states
         if self._samples is None:  # if new, initialize everything
             self._samples = np.zeros((n_samples, self.d))
@@ -199,7 +293,7 @@ class SimpleRadiusPRM(SimplePRM):
             # apply a doubling scheme for connection neighbors to obtain the threshold graph
             self.nn_index = _build_threshold_index(self._samples)
             adj_arr, dists_arr = self.nn_index.neighbor_graph
-            self._g_prm = _nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr)
+            self._g_prm = self._nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr)
 
         else:  # otherwise, we reuse past computation
             past_n_samples = self._samples.shape[0]
@@ -217,15 +311,17 @@ class SimpleRadiusPRM(SimplePRM):
             adj_arr, dists_arr = self.nn_index.neighbor_graph
             if np.all(dists_arr[:, -1] > self.conn_r) or self.k_neighbors >= self.max_k_neighbors:
                 self.prm_graph.addNodes(m_new_samples)
-                g_new_conns = _nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr,
-                                                                          include_starting=past_n_samples)
+                g_new_conns = self._nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr,
+                                                                               include_starting=past_n_samples,
+                                                                               threshold_rad=self.conn_r)
                 self.GT.merge(self._g_prm, g_new_conns)
 
             else:
                 self.k_neighbors *= 2  # a bit hacky, but a way to make sure we don't recompute the graph at the same K
                 self.nn_index = _build_threshold_index(self.prm_samples)
                 adj_arr, dists_arr = self.nn_index.neighbor_graph
-                self._g_prm = _nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr)
+                self._g_prm = self._nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr,
+                                                                               threshold_rad=self.conn_r)
 
         dist_samples_to_line = self.dist_points_to_path(self._samples)
         samples_within_conn_r = np.arange(n_samples)[dist_samples_to_line <= self.conn_r]
