@@ -4,7 +4,8 @@ from abc import ABC, abstractmethod
 import numpy as np
 import pynndescent as pynn
 import networkit as nk
-
+import uuid
+import os
 
 # TODO:
 # create a PRM superclass that has the same query methods, and then subclass with a different constructor that will
@@ -19,6 +20,14 @@ class SimplePRM(ABC):
 
         self.rng_seed = seed
         self.verbose = verbose
+
+        # directory to the temp storage directory for intermediate computations
+        # I'd use tempfiles, but networkit requires string paths... and not just file-like objects
+        # This ends up being cleaner, but now we need to worry about cleaning up after ourselves.
+        self.temp_dir = os.path.join(
+            os.path.dirname(os.path.realpath(__file__)),
+            '../temp/'
+        )
 
     @abstractmethod
     def grow_to_n_samples(self, n_samples):
@@ -161,18 +170,19 @@ class SimplePRM(ABC):
 
 class SimpleNearestNeighborPRM(SimplePRM):
     """
-    A K-NN PRM, but with an optional threshold_radius as a cutoff. For us, the experiments turned out to be
+    A K-NN PRM. Radius tresholds are implemented by set_connection_radius(), and but will automatically be
+    cleared when the PRM is grown. For us, the experiments turned out to be
     more elegant if we took a full K-NN (as PyNNDescent would compute it) and then find the radius
     where epsilon-delta completeness checks fail.
     """
 
     def __init__(self, k_neighbors, motion_validity_checker, valid_state_sampler, sdf_to_path,
-                 connection_radius=None, seed=None, verbose=False):
+                 seed=None, verbose=False):
         super().__init__(motion_validity_checker, valid_state_sampler, seed, verbose)
 
         self.d = valid_state_sampler().size
         self.k_neighbors = k_neighbors
-        self.conn_r = connection_radius
+        self.conn_r = None
 
         self.dist_points_to_path = sdf_to_path
 
@@ -183,28 +193,39 @@ class SimpleNearestNeighborPRM(SimplePRM):
         self._samples = None
         self._g_prm = None
 
+        # create a temporary graph cache file
+        self.tmp_graph_cache_path = os.path.join(self.temp_dir, str(uuid.uuid4()) + '.nkbg003')
+
     def grow_to_n_samples(self, n_samples):
+
+        # clear connection radius
+        self.conn_r = None
 
         if self._samples is None:  # if new, initialize everything
             self._samples = np.zeros((n_samples, self.d))
 
-            for i in range(n_samples):
-                self._samples[i, :] = self.sample_state()
+        for i in range(n_samples):
+            self._samples[i, :] = self.sample_state()
 
-            # build the index
-            self.nn_index = pynn.NNDescent(self._samples,
-                                           n_neighbors=self.k_neighbors,
-                                           random_state=self.rng_seed,
-                                           diversify_prob=0.0,
-                                           pruning_degree_multiplier=1.0,
-                                           verbose=self.verbose)
+        # build the index
+        # if we are growing the graph, it means that a previous check with a larger radius worked.
+        # so know the PRM is complete for a larger radius, so we can lose NNs losslessly.
+        self.nn_index = pynn.NNDescent(self._samples,
+                                       n_neighbors=self.k_neighbors,
+                                       random_state=self.rng_seed,
+                                       diversify_prob=0.0,
+                                       pruning_degree_multiplier=1.0,
+                                       verbose=self.verbose)
 
-            # build the master graph
-            edges, dists = self.nn_index.neighbor_graph
-            master_graph = self._nn_edge_list_and_dist_list_to_nk_prm_graph(edges, dists)
-        else:
-            #TODO
-            pass
+        # build the master graph
+        edges, dists = self.nn_index.neighbor_graph
+        master_graph = self._nn_edge_list_and_dist_list_to_nk_prm_graph(edges, dists)
+
+        # we'll save the master graph -- don't want to hold multiple PRMs in RAM.
+        nk.writeGraph(master_graph, self.tmp_graph_cache_path, nk.graphio.NetworkitBinary)
+
+        # then write in the master graph.
+        self._g_prm = master_graph
 
     def set_connection_radius(self, connection_radius):
         pass
