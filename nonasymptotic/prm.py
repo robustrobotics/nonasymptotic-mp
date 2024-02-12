@@ -7,6 +7,7 @@ import networkit as nk
 import uuid
 import os
 
+
 # TODO:
 # create a PRM superclass that has the same query methods, and then subclass with a different constructor that will
 # build a k-nearest neighbor graph and then binary search down the radius.
@@ -34,19 +35,7 @@ class SimplePRM(ABC):
         pass
 
     @abstractmethod
-    def num_vertices(self):
-        pass
-
-    @abstractmethod
-    def num_edges(self):
-        pass
-
-    @abstractmethod
     def reset(self):
-        pass
-
-    @abstractmethod
-    def save(self, filepath):
         pass
 
     @abstractmethod
@@ -167,10 +156,44 @@ class SimplePRM(ABC):
 
         return new_graph
 
+    def num_vertices(self):
+        return self.prm_graph.numberOfNodes() if self.prm_graph is not None else 0
+
+    def num_edges(self):
+        return self.prm_graph.numberOfEdges() if self.prm_graph is not None else 0
+
+    def save(self, filepath):
+        """
+        :param filepath: file directory (without extension, since multiple files need to be saved)
+        """
+        if self.prm_graph is not None:
+            nk.writeGraph(self.prm_graph, filepath + '.nkb', nk.Format.NetworkitBinary)
+        else:
+            raise RuntimeWarning('Tried to save an uninitialized PRM.')
+
+        if self.prm_samples is not None:
+            np.save(filepath + '.npy', self.prm_samples)
+
+    def _compute_spsp(self, samples_to_spsp):
+        n_samples = self.prm_samples.shape[0]
+
+        spsp = nk.distance.SPSP(self.prm_graph, samples_to_spsp)
+        spsp.setTargets(samples_to_spsp)
+        spsp.run()
+
+        # array-ify the lookup
+        g_sp_lookup = spsp.getDistances(asarray=True)
+        sample_to_lookup_ind = np.zeros(n_samples, dtype=np.intp)
+        # we set to the n_samples to throw an error if query for a vertex outside the conn_r
+        sample_to_lookup_ind[:] = n_samples
+        sample_to_lookup_ind[samples_to_spsp] = np.arange(samples_to_spsp.shape[0])
+
+        return g_sp_lookup, sample_to_lookup_ind
+
 
 class SimpleNearestNeighborPRM(SimplePRM):
     """
-    A K-NN PRM. Radius tresholds are implemented by set_connection_radius(), and but will automatically be
+    A K-NN PRM. Radius thresholds are implemented by set_connection_radius(), and but will automatically be
     cleared when the PRM is grown. For us, the experiments turned out to be
     more elegant if we took a full K-NN (as PyNNDescent would compute it) and then find the radius
     where epsilon-delta completeness checks fail.
@@ -184,9 +207,9 @@ class SimpleNearestNeighborPRM(SimplePRM):
         self.k_neighbors = k_neighbors
         self.conn_r = None
 
+        self.certified_max_conn_r = None  # this is the maximal conn_r that we know will recapture the correct PRM graph
         self.dist_points_to_path = sdf_to_path
 
-        self.nn_index = None
         self.g_sp_lookup = None
         self.sample_to_lookup_ind = None
 
@@ -196,10 +219,17 @@ class SimpleNearestNeighborPRM(SimplePRM):
         # create a temporary graph cache file
         self.tmp_graph_cache_path = os.path.join(self.temp_dir, str(uuid.uuid4()) + '.nkbg003')
 
+    @property
+    def prm_graph(self) -> nk.Graph:
+        return self._g_prm
+
+    @property
+    def prm_samples(self) -> np.ndarray:
+        return self._samples
+
     def grow_to_n_samples(self, n_samples):
 
-        # clear connection radius
-        self.conn_r = None
+        self.conn_r = None  # clear the connection radius
 
         if self._samples is None:  # if new, initialize everything
             self._samples = np.zeros((n_samples, self.d))
@@ -210,54 +240,96 @@ class SimpleNearestNeighborPRM(SimplePRM):
         # build the index
         # if we are growing the graph, it means that a previous check with a larger radius worked.
         # so know the PRM is complete for a larger radius, so we can lose NNs losslessly.
-        self.nn_index = pynn.NNDescent(self._samples,
-                                       n_neighbors=self.k_neighbors,
-                                       random_state=self.rng_seed,
-                                       diversify_prob=0.0,
-                                       pruning_degree_multiplier=1.0,
-                                       verbose=self.verbose)
+        effective_k = min(n_samples - 1, self.k_neighbors)
+        nn_index = pynn.NNDescent(self._samples,
+                                  n_neighbors=effective_k,
+                                  random_state=self.rng_seed,
+                                  diversify_prob=0.0,
+                                  pruning_degree_multiplier=1.0,
+                                  verbose=self.verbose)
 
         # build the master graph
-        edges, dists = self.nn_index.neighbor_graph
+        edges, dists = nn_index.neighbor_graph
         master_graph = self._nn_edge_list_and_dist_list_to_nk_prm_graph(edges, dists)
+        master_graph.indexEdges()
 
         # we'll save the master graph -- don't want to hold multiple PRMs in RAM.
-        nk.writeGraph(master_graph, self.tmp_graph_cache_path, nk.graphio.NetworkitBinary)
+        nk.writeGraph(master_graph, self.tmp_graph_cache_path, nk.Format.NetworkitBinary)
 
         # then write in the master graph.
         self._g_prm = master_graph
 
-    def set_connection_radius(self, connection_radius):
-        pass
+        self.certified_max_conn_r = np.min(dists[:, -1])  # the closest kth neighbor makes the certified conn_r
+        if self.verbose:
+            print("Certified maximal correct connection radius: %f" % self.certified_max_conn_r)
 
-    def get_sorted_nn_distances(self):
-        pass
+        # NOT true Knn from points on line, but not important for us
+        n_samples = self._samples.shape[0]
+        dist_samples_to_line = self.dist_points_to_path(self._samples)
+        samples_within_conn_r = np.arange(n_samples)[dist_samples_to_line <= self.certified_max_conn_r]
+        self.g_sp_lookup, self.sample_to_lookup_ind = self._compute_spsp(samples_within_conn_r)
 
-    def num_vertices(self):
-        pass
+        # returned the certified max and the neighbor dists (since they will be used in experiment runs)
+        # it's a bit of a kludge, but we return here so we do not need to duplicate the sorted dists
+        # (could make gigabytes of a difference)
+        return self.certified_max_conn_r, np.sort(dists, axis=None)
 
-    def num_edges(self):
-        pass
+    def set_connection_radius(self, new_conn_r):
+        # there may be a way to do this with networkit.sparsification, but I can't find it
+        if new_conn_r > self.certified_max_conn_r:
+            print("Warning: asking for a connection radius larger than maximum certified. "
+                  "Behavior may be inconsistent.")
+
+        # if we are growing the radius, we need to reload the master graph
+        if self.conn_r is not None and new_conn_r > self.conn_r:
+            self._g_prm = nk.readGraph(self.tmp_graph_cache_path, nk.Format.NetworkitBinary)
+
+        # then iterate over and remove the edges that are too large
+        for u, v, w in self._g_prm.iterEdgesWeights():
+            if w >= new_conn_r:
+                self._g_prm.removeEdge(u, v)
+
+        self.conn_r = new_conn_r
+
+        # recompute shortest paths over new graph and store their distances
+        n_samples = self._samples.shape[0]
+        dist_samples_to_line = self.dist_points_to_path(self._samples)
+        samples_within_conn_r = np.arange(n_samples)[dist_samples_to_line <= self.conn_r]
+        self.g_sp_lookup, self.sample_to_lookup_ind = self._compute_spsp(samples_within_conn_r)
 
     def reset(self):
-        pass
+        self.conn_r = None
 
-    def save(self, filepath):
-        pass
+        self.certified_max_conn_r = None  # this is the maximal conn_r that we know will recapture the correct PRM graph
+
+        self.g_sp_lookup = None
+        self.sample_to_lookup_ind = None
+
+        self._samples = None
+        self._g_prm = None
+
+        # delete the cache file
+        if os.path.exists(self.tmp_graph_cache_path):
+            os.remove(self.tmp_graph_cache_path)
 
     def _query_samples(self, query):
-        pass
+        dists_from_query = np.linalg.norm(self._samples - query, axis=1)
+        within_conn_r = dists_from_query <= self.conn_r if self.conn_r is not None \
+            else dists_from_query <= self.certified_max_conn_r
+
+        points_within_conn_r = self._samples[within_conn_r]
+        ids_within_conn_r = np.arange(self._samples.shape[0])[within_conn_r]
+
+        valid_motions = self.check_motion(
+            np.tile(query, (points_within_conn_r.shape[0], 1)),
+            points_within_conn_r)
+        return ids_within_conn_r[valid_motions], dists_from_query[within_conn_r][valid_motions]
 
     def _distance_in_graph(self, starts, goals):
-        pass
-
-    @property
-    def prm_graph(self) -> nk.Graph:
-        pass
-
-    @property
-    def prm_samples(self) -> np.ndarray:
-        pass
+        return self.g_sp_lookup[
+            self.sample_to_lookup_ind[starts],
+            self.sample_to_lookup_ind[goals]
+        ]
 
 
 class SimpleRadiusPRM(SimplePRM):
@@ -344,19 +416,10 @@ class SimpleRadiusPRM(SimplePRM):
                 self._g_prm = self._nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr,
                                                                                threshold_rad=self.conn_r)
 
+        n_samples = self._samples.shape[0]
         dist_samples_to_line = self.dist_points_to_path(self._samples)
         samples_within_conn_r = np.arange(n_samples)[dist_samples_to_line <= self.conn_r]
-        spsp = nk.distance.SPSP(self._g_prm, samples_within_conn_r)
-        spsp.setTargets(samples_within_conn_r)
-        spsp.run()
-        self.g_sp_lookup = spsp.getDistances(asarray=True)
-        self.sample_to_lookup_ind = np.zeros(n_samples, dtype=np.intp)
-
-        # we set to the n_samples to throw an error if query for a vertex outside the conn_r
-        self.sample_to_lookup_ind[:] = n_samples
-        self.sample_to_lookup_ind[samples_within_conn_r] = np.arange(samples_within_conn_r.shape[0])
-
-        # self.g_spsp = spsp
+        self.g_sp_lookup, self.sample_to_lookup_ind = self._compute_spsp(samples_within_conn_r)
 
     def _query_samples(self, query):
         # Brute force search on and validity check. We're avoiding the PRM index now.
@@ -377,28 +440,10 @@ class SimpleRadiusPRM(SimplePRM):
             self.sample_to_lookup_ind[goals]
         ]
 
-    def num_vertices(self):
-        return self.prm_graph.numberOfNodes() if self.prm_graph is not None else 0
-
-    def num_edges(self):
-        return self.prm_graph.numberOfEdges() if self.prm_graph is not None else 0
-
     def reset(self):
         self._g_prm = None
         self._samples = None
         self.nn_index = None
-
-    def save(self, filepath):
-        """
-        :param filepath: file directory (without extension, since multiple files need to be saved)
-        """
-        if self.prm_graph is not None:
-            nk.writeGraph(self.prm_graph, filepath + '.nkb', nk.Format.NetworkitBinary)
-        else:
-            raise RuntimeWarning('Tried to save an uninitialized PRM.')
-
-        if self.prm_samples is not None:
-            np.save(filepath + '.npy', self.prm_samples)
 
     @property
     def prm_graph(self) -> nk.Graph:
