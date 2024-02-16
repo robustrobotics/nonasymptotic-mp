@@ -8,6 +8,8 @@ import numpy as np
 import triangle as tr
 import scipy
 import matplotlib.pyplot as plt
+import sys
+
 
 
 def compute_vol_unit_sphere(_dim):
@@ -30,12 +32,14 @@ def compute_numerical_bound(clearance, success_prob, coll_free_volume, dim, tol)
     """
     :param clearance: delta-clearance of the environment
     :param coll_free_volume: volume of the collision-free configuration space. could be an upper bound.
+    :param dim: dimension of system (in the linear algebraic/DOF sense!)
     :param tol: stretch factor on the optimal path (epsilon), if tol is None, will bound for existence of path
     but not optimality of the approximation of the path.
     :param success_prob: probability PRM well-approximates all optimal delta clear paths up to tol.
-    :param dimension of system (in the linear algebraic/DOF sense!)
     :return: an upper bound of number of samples required, and the connection radius of the PRM.
     """
+    if success_prob <= 0.0 or success_prob >= 1.0:
+        raise ArithmeticError("Success probability must be between 0.0 and 1.0, noninclusive.")
 
     failure_prob = 1.0 - success_prob
     alpha = tol / np.sqrt(1 + tol ** 2) if tol is not None else 1.0
@@ -60,6 +64,9 @@ def compute_numerical_bound(clearance, success_prob, coll_free_volume, dim, tol)
         m_samples_lb = m_samples_ub
         m_samples_ub *= 2
 
+        if m_samples_ub > sys.maxsize:
+            raise OverflowError("Reached sample threshold for useful computation.")
+
     # next, binary search down to the right number of samples.
     while True:
         if m_samples_ub == m_samples_lb + 1 :
@@ -67,7 +74,7 @@ def compute_numerical_bound(clearance, success_prob, coll_free_volume, dim, tol)
         elif m_samples_ub <= m_samples_lb:
             raise ArithmeticError('Something wrong happened.')
 
-        test_samples = int(m_samples_lb + m_samples_ub / 2)
+        test_samples = int((m_samples_lb + m_samples_ub) / 2)
         # test if the tester is the sample count we're looking for
         cand_gamma = compute_sauer_shelah_bound(test_samples, rho, vc_dim)
 
