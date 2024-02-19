@@ -1,7 +1,7 @@
 import sys 
 
-sys.path.extend(["../pddlstream/examples/pybullet/utils"])
-sys.path.extend(["../pddlstream"])
+sys.path.extend(["./pddlstream/examples/pybullet/utils"])
+sys.path.extend(["./pddlstream"])
 
 from pddlstream.algorithms.meta import solve, create_parser
 from pddlstream.language.constants import And, print_solution, PDDLProblem
