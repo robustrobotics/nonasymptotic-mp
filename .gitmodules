@@ -1,0 +1,3 @@
+[submodule "exps/tamp_environment/pddlstream"]
+	path = exps/tamp_environment/pddlstream
+	url = https://github.com/aidan-curtis/pddlstream
