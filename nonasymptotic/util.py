@@ -2,7 +2,7 @@ from shapely.geometry import Point
 from shapely.plotting import plot_polygon
 from shapely.affinity import affine_transform
 from shapely.coordinates import get_coordinates
-from shapely import get_num_points, MultiPolygon, Polygon
+from shapely import point_on_surface, get_num_interior_rings, get_num_points, get_exterior_ring, MultiPolygon, Polygon
 
 import numpy as np
 import triangle as tr
@@ -85,8 +85,7 @@ def compute_numerical_bound(clearance, success_prob, coll_free_volume, dim, tol)
 
 
 def random_point_in_mpolygon(mpolygon, rng=None, vis=False):
-    """Return list of k points chosen uniformly at random inside the polygon."""
-    # TODO: need to consider if there are internal holes!
+    """Return list of k points chosen uniformly at random inside the (multi-)polygon."""
     # This is a helper method in this class so we can share the random seed.
     # someone wrote this so we didn't have to:
     # https://codereview.stackexchange.com/questions/69833/generate-sample-coordinates-inside-a-polygon
@@ -94,15 +93,31 @@ def random_point_in_mpolygon(mpolygon, rng=None, vis=False):
     if rng is None:
         rng = np.random.default_rng()
 
-    poly_boundaries = np.array(mpolygon.boundary.geoms) \
-        if isinstance(mpolygon, MultiPolygon) \
-        else np.array([mpolygon.boundary])
+    if isinstance(mpolygon, MultiPolygon):
+        poly_exteriors = get_exterior_ring(np.array(mpolygon.geoms))
+        num_mpoly_holes = get_num_interior_rings()
+        # TODO: consider adversarial case of nested geoms
+
+        interior_points = np.array([[-100, -100]])
+    elif isinstance(mpolygon, Polygon):
+        poly_exteriors = mpolygon.exterior
+        mpoly_interiors_as_rings = mpolygon.interiors
+
+        # convert to Polygons (note: this is the most elegant way I can think of rn)
+        mpoly_interiors_as_polys = MultiPolygon(
+           zip(mpoly_interiors_as_rings, [[]] * len(mpoly_interiors_as_rings))
+        ).geoms
+
+        # finally get the interior representative points so triangle can make holes
+        interior_points = get_coordinates(point_on_surface(mpoly_interiors_as_polys))
+    else:
+        raise NotImplementedError('Did not implement sampling from: %s.' % str(type(mpolygon)))
 
     # coordinates present in a single list.
-    vertices = get_coordinates(poly_boundaries)
+    vertices = get_coordinates(poly_exteriors)
 
     # compute the repeating vertex to delete
-    num_pts_in_polys = get_num_points(poly_boundaries)
+    num_pts_in_polys = get_num_points(poly_exteriors)
     n_polys = num_pts_in_polys.shape[0]
 
     del_vert_indices = np.copy(num_pts_in_polys)
@@ -129,7 +144,10 @@ def random_point_in_mpolygon(mpolygon, rng=None, vis=False):
     data = {
         'vertices': vertices,
         'segments': segments,
-        'holes': [[101.0, 100.0]]
+        'holes': np.concatenate([
+            np.array([[-100.0, -100.0]]),
+            interior_points
+        ])
         # put a point that will always be outside because of boundedness of input space
     }
 
