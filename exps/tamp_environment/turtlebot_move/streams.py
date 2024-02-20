@@ -97,7 +97,7 @@ def get_above_gen(problem, max_attempts=1, custom_limits={}, collisions=True, **
 
 #######################################################
 
-def get_motion_fn(problem, custom_limits={}, collisions=True, teleport=False, holonomic=False, reversible=False, **kwargs):
+def get_motion_fn(problem, custom_limits={}, collisions=True, teleport=False, holonomic=False, reversible=False, algorithm="prm", num_samples=10, connect_radius=None, **kwargs):
     def test(rover, q1, q2, fluents=[]):
         if teleport:
             ht = Trajectory([q1, q2])
@@ -127,11 +127,11 @@ def get_motion_fn(problem, custom_limits={}, collisions=True, teleport=False, ho
         if holonomic:
             path = plan_joint_motion(rover, q1.joints, q2.values, custom_limits=custom_limits,
                                      attachments=attachments, obstacles=obstacles, self_collisions=False, 
-                                     algorithm="prm", **kwargs)
+                                     algorithm=algorithm, num_samples=num_samples, connect_distance=connect_radius, **kwargs)
         else:
             path = plan_nonholonomic_motion(rover, q1.joints, q2.values, reversible=reversible, custom_limits=custom_limits,
                                             attachments=attachments, obstacles=obstacles, self_collisions=False, 
-                                            algorithm="prm", **kwargs)
+                                            algorithm=algorithm, num_samples=num_samples, connect_distance=connect_radius, **kwargs)
         if path is None:
             return None
         ht = create_trajectory(rover, q2.joints, path)

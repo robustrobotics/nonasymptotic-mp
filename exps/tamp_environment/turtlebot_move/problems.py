@@ -4,7 +4,8 @@ from collections import OrderedDict
 from pybullet_tools.utils import set_point, Point, create_box, \
     stable_z, load_model, TURTLEBOT_URDF, joints_from_names, \
     set_joint_positions, get_joint_positions, remove_body, HideOutput, \
-    GREY, TAN, get_bodies, pairwise_collision, sample_placement
+    GREY, TAN, get_bodies, pairwise_collision, sample_placement, get_aabb
+import random
 
 
 def sample_placements(body_surfaces, obstacles=None, min_distances={}):
@@ -57,7 +58,7 @@ class RoversProblem(object):
 
 #######################################################
 
-def rovers1(n_obstacles=50):
+def rovers1(n_obstacles=50, robot_scale=1):
     base_extent = 5.0
     base_limits = (-base_extent/2.*np.ones(2), base_extent/2.*np.ones(2))
     mound_height = 0.1
@@ -83,9 +84,9 @@ def rovers1(n_obstacles=50):
     rover_conf = (+1.75, -1.75, np.pi)
     goal_conf = (-1.75, 1.75, 0)
     
-    with HideOutput():
-        rover = load_model(TURTLEBOT_URDF)
-        rover2 = load_model(TURTLEBOT_URDF)
+    rover = load_model(TURTLEBOT_URDF, scale=robot_scale)
+    rover2 = load_model(TURTLEBOT_URDF, scale=2.0)
+    print(get_aabb(rover2))
         
     robot_z = stable_z(rover, floor)
     set_point(rover, Point(z=robot_z))
