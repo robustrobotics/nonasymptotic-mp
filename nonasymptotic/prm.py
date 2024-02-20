@@ -191,9 +191,10 @@ class SimplePRM(ABC):
         return g_sp_lookup, sample_to_lookup_ind
 
 
-class SimpleNearestNeighborPRM(SimplePRM):
+class SimpleNearestNeighborRadiusPRM(SimplePRM):
     """
-    A K-NN PRM. Radius thresholds are implemented by set_connection_radius(), and but will automatically be
+    A K-NN PRM adapted to be a radius PRM. Radius thresholds are implemented by set_connection_radius(),
+    and but will automatically be
     cleared when the PRM is grown. For us, the experiments turned out to be
     more elegant if we took a full K-NN (as PyNNDescent would compute it) and then find the radius
     where epsilon-delta completeness checks fail.
@@ -268,6 +269,9 @@ class SimpleNearestNeighborPRM(SimplePRM):
         dist_samples_to_line = self.dist_points_to_path(self._samples)
         samples_within_conn_r = np.arange(n_samples)[dist_samples_to_line <= self.certified_max_conn_r]
         self.g_sp_lookup, self.sample_to_lookup_ind = self._compute_spsp(samples_within_conn_r)
+
+        # set the new connection radius
+        self.set_connection_radius(self.certified_max_conn_r)
 
         # returned the certified max and the neighbor dists (since they will be used in experiment runs)
         # it's a bit of a kludge, but we return here so we do not need to duplicate the sorted dists
