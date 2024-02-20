@@ -12,7 +12,6 @@ import os
 # build a k-nearest neighbor graph and then binary search down the radius.
 
 # create abstract properties that need to be implemented as the standard names of things
-# TODO: test to make sure we get reasonable results
 
 class SimplePRM(ABC):
     def __init__(self, motion_validity_checker, valid_state_sampler, seed, verbose):
