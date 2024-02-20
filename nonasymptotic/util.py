@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 import sys
 
 
-
 def compute_vol_unit_sphere(_dim):
     return np.pi ** (_dim / 2) / scipy.special.gamma(_dim / 2 + 1)
 
@@ -70,7 +69,7 @@ def compute_numerical_bound(clearance, success_prob, coll_free_volume, dim, tol)
 
     # next, binary search down to the right number of samples.
     while True:
-        if m_samples_ub == m_samples_lb + 1 :
+        if m_samples_ub == m_samples_lb + 1:
             return m_samples_ub, conn_r
         elif m_samples_ub <= m_samples_lb:
             raise ArithmeticError('Something wrong happened.')
