@@ -88,3 +88,15 @@ class TestSauerShelah:
         recovered_m_samples = compute_numerical_bound(delta, 1.0 - failure_prob_to_find, vol_env, dim, epsilon)
 
         assert recovered_m_samples[0] == m_samples + 1
+
+    def test_existence_requires_fewer_samples(self):
+        delta = 0.5
+        epsilon = None
+        dim = 2
+        vol_env = 1.0
+
+        no_tol_samples, _ = compute_numerical_bound(delta,  1.0 - 0.1, vol_env, dim, epsilon)
+        loose_tol_samples, _ = compute_numerical_bound(delta, 1.0 - 0.1, vol_env, dim, 10)
+        assert loose_tol_samples > no_tol_samples
+
+

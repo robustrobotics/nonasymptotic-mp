@@ -18,7 +18,8 @@ def compute_vol_unit_sphere(_dim):
 
 def compute_rho(delta, epsilon, dim, vol_env):
     measures_unit_sphere = compute_vol_unit_sphere(dim) / vol_env
-    return measures_unit_sphere * (epsilon * delta / np.sqrt(1 + epsilon ** 2)) ** dim
+    alpha = epsilon / np.sqrt(1 + epsilon ** 2) if epsilon is not None else 1.0
+    return measures_unit_sphere * (alpha * delta) ** dim
 
 
 def compute_sauer_shelah_bound(m_samples, rho, vc_dim):
