@@ -8,3 +8,4 @@ matplotlib~=3.7.1
 scipy~=1.10.1
 triangle
 pandas~=2.0.2
+pybullet~=3.2.6
