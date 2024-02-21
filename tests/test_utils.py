@@ -3,6 +3,7 @@ from nonasymptotic.util import random_point_in_mpolygon, compute_sauer_shelah_bo
 
 from shapely.geometry import Polygon, MultiPolygon, MultiLineString, MultiPoint
 from shapely.plotting import plot_polygon, plot_points
+from shapely import union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,6 +17,11 @@ class TestRandomSampling:
     tri = Polygon([(2, 0), (2, 1), (1, 2)])
     tri_square = MultiPolygon([tri, square])
 
+    big_square_with_hole = Polygon([(-5, -5), (-5, 5), (5, 5), (5, -5)],
+                                   [[(-4, -4), (-4, 4), (4, 4), (4, -4)]])
+    smaller_square_with_hole = Polygon([(-3, -3), (-3, 3), (3, 3), (3, -3)],
+                                       [[(-2, -2), (-2, 2), (2, 2), (2, -2)]])
+
     def sample_membership_test(self, geom):
         samples = np.array(
             [random_point_in_mpolygon(geom, rng=self.rng, vis=False) for _ in range(1000)]
@@ -28,10 +34,10 @@ class TestRandomSampling:
         if not is_member.all():
             errors += "%s is/are not members of geom" % str(samples[is_member])
 
-        # fig, ax = plt.subplots()
-        # plot_polygon(geom, ax=ax, color='blue')
-        # plot_points(MultiPoint(samples), ax=ax, color='green')
-        # plt.show()
+        fig, ax = plt.subplots()
+        plot_polygon(geom, ax=ax, color='blue')
+        plot_points(MultiPoint(samples), ax=ax, color='green')
+        plt.show()
 
         assert not errors
 
@@ -43,6 +49,14 @@ class TestRandomSampling:
 
     def test_sample_membership_tri_square(self):
         self.sample_membership_test(self.tri_square)
+
+    def test_sample_membership_single_hole(self):
+        self.sample_membership_test(self.smaller_square_with_hole)
+
+    def test_sample_membership_nested_holes(self):
+        self.sample_membership_test(union(
+            self.big_square_with_hole, self.smaller_square_with_hole
+        ))
 
 
 class TestSauerShelah:
@@ -95,8 +109,6 @@ class TestSauerShelah:
         dim = 2
         vol_env = 1.0
 
-        no_tol_samples, _ = compute_numerical_bound(delta,  1.0 - 0.1, vol_env, dim, epsilon)
+        no_tol_samples, _ = compute_numerical_bound(delta, 1.0 - 0.1, vol_env, dim, epsilon)
         loose_tol_samples, _ = compute_numerical_bound(delta, 1.0 - 0.1, vol_env, dim, 10)
         assert loose_tol_samples > no_tol_samples
-
-

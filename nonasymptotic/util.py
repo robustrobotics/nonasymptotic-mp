@@ -2,7 +2,8 @@ from shapely.geometry import Point
 from shapely.plotting import plot_polygon
 from shapely.affinity import affine_transform
 from shapely.coordinates import get_coordinates
-from shapely import point_on_surface, get_num_interior_rings, get_num_points, get_exterior_ring, MultiPolygon, Polygon
+from shapely import point_on_surface, get_interior_ring, get_num_interior_rings, get_num_points, get_exterior_ring, \
+    covers, MultiPolygon, Polygon, difference
 
 import numpy as np
 import triangle as tr
@@ -93,20 +94,44 @@ def random_point_in_mpolygon(mpolygon, rng=None, vis=False):
     if rng is None:
         rng = np.random.default_rng()
 
+    # find points inside holes so we don't sample from holes
     if isinstance(mpolygon, MultiPolygon):
-        poly_exteriors = get_exterior_ring(np.array(mpolygon.geoms))
-        num_mpoly_holes = get_num_interior_rings()
-        # TODO: consider adversarial case of nested geoms
+        polys = np.array(mpolygon.geoms)
 
-        interior_points = np.array([[-100, -100]])
+        exterior_rings = get_exterior_ring(polys)
+        exterior_polys = np.array(MultiPolygon(zip(exterior_rings, [[]] * exterior_rings.size)).geoms)
+
+        # gather all the interior rings
+        num_mpoly_holes = get_num_interior_rings(polys)
+        interior_rings = np.concatenate(
+            [get_interior_ring(polys, i) for i in range(np.max(num_mpoly_holes))]
+        )
+        interior_rings = interior_rings[interior_rings != np.array(None)]
+        interior_polys = np.array(MultiPolygon(zip(interior_rings, [[]] * interior_rings.size)).geoms)
+
+        # check nestedness (numpy vectorized brute force)
+        _inpolys, _expolys = np.meshgrid(interior_polys, exterior_polys, indexing="ij")
+        _covers = covers(_inpolys, _expolys)
+        _cover_inds = np.moveaxis(
+            np.mgrid[0:interior_polys.size, 0:exterior_polys.size],
+            0, 2
+        )[_covers]
+
+        # we're not expecting many intersections, so for loop is okay
+        for i_inpoly, i_expoly in _cover_inds:
+            interior_polys[i_inpoly] = difference(interior_polys[i_inpoly], exterior_polys[i_expoly])
+
+        # compute correct representative points
+        interior_points = get_coordinates(point_on_surface(interior_polys))
+
     elif isinstance(mpolygon, Polygon):
-        poly_exteriors = mpolygon.exterior
+        poly_exteriors = np.array([Polygon(mpolygon.exterior)])
         mpoly_interiors_as_rings = mpolygon.interiors
 
         # convert to Polygons (note: this is the most elegant way I can think of rn)
-        mpoly_interiors_as_polys = MultiPolygon(
-           zip(mpoly_interiors_as_rings, [[]] * len(mpoly_interiors_as_rings))
-        ).geoms
+        mpoly_interiors_as_polys = np.array(MultiPolygon(
+            zip(mpoly_interiors_as_rings, [[]] * len(mpoly_interiors_as_rings))
+        ).geoms)
 
         # finally get the interior representative points so triangle can make holes
         interior_points = get_coordinates(point_on_surface(mpoly_interiors_as_polys))
