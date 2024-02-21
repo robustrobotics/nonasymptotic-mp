@@ -99,7 +99,7 @@ class StraightLine(Environment):
         length_tri_points = np.array([(0.0, conn_r), (0.0, 1.0), (1.0 - conn_r, 1.0)])
         length_space_to_cover = Polygon(length_tri_points)
 
-        base_line_points = np.array([(0.0, conn_r), (1.0 - conn_r, 1.0)])
+        # base_line_points = np.array([(0.0, conn_r), (1.0 - conn_r, 1.0)])
         # base_line = LineString(base_line_points)
 
         order_vec = np.array([-np.sqrt(2), np.sqrt(2)]) / 2
