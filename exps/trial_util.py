@@ -1,40 +1,65 @@
 from nonasymptotic.envs import StraightLine
-from nonasymptotic.prm import SimpleRadiusPRM
+from nonasymptotic.prm import SimpleNearestNeighborRadiusPRM
 
 import time
 import pandas as pd
 import numpy as np
 
 
-# TODO: modify straight_line_trial to
 # accept a resolution of epsilons we are interested in
 # binary search down an ordering of the nearest neighbors until we find the neighbor we lose epsilon-delta optimal
 # (or at least be sensitive to timeouts to have a gray zone)
 # then report back the epsilon gray-zone between the node that must be included in the next NN dist down as the
 # table entry, along with info.
 
+
+# start with small samples, with constant # of nearest neighbors
+# have: lower bound radius is 0.0, upper bound radius is the implicit radius checked.
+# sort the nn dists as given by the PRM.
+# then do binary search.
+# if all goes well, we will find radius_lb which is too stringent, and radius_ub which is not.
+# we could probably _further_ understand what the radius exactly needs to be, but that's a bit much.
+# we'll just have an 'uknown interval' for now.
+
+# then, we up the sample count. we already know that radius_ub already works... which
+# imposes an upper bound on the distances (if helpful)
+# if not, then we just have to redo the binary search again.
+
+# it is totally possible that none of the radii (even the full graph), work. then we accept
+# that we know that none of the radii represented by the graph are satisfactory.
+
+# this will then offload more work to the post-processing/plotting code to understand
+# the data
+
+# if y = (1 + x) / np.sqrt(1 + x**2) => x = (1 - np.sqrt(2*y**2 - y**4)) / (y**2 - 1)
+
 def straight_line_trial(delta_clear, epsilon_tol, dim, rng_seed,
                         sample_schedule=None,
                         n_samples_per_ed_check_round=100,
                         ed_check_timeout=60.0,
                         area_tol=1e-8,
-                        max_k_connection_neighbors=2048):
+                        max_k_connection_neighbors=254):
     if sample_schedule is None:
         # default 'small experiment' sample schedule
         sample_schedule = [10, 100, 1000]
 
     # set up experiment objs
-    conn_radius = 2 * (1 + epsilon_tol) * delta_clear / np.sqrt(1 + epsilon_tol ** 2)
     env = StraightLine(dim=dim, delta_clearance=delta_clear, seed=rng_seed)
-    prm = SimpleRadiusPRM(conn_radius, env.is_motion_valid, env.sample_from_env, env.distance_to_path,
-                          max_k_connection_neighbors=max_k_connection_neighbors, seed=rng_seed, verbose=True)
+    prm = SimpleNearestNeighborRadiusPRM(max_k_connection_neighbors,
+                                         env.is_motion_valid,
+                                         env.sample_from_env,
+                                         env.distance_to_path,
+                                         seed=rng_seed, verbose=True)
 
     # lists to save records (we'll form a dataframe afterward)
-    ed_complete_record = []
+    radius_lbs = []
+    radius_ubs = []
     info_record = []
     build_runtimes = []
     check_runtimes = []
     k_prms = []
+
+    # TODO: finish updating expeirment procedure code
 
     # run along sample schedule. Once we are ed-complete, we always will be, so we skip the rest when we are.\
     is_ed_complete = False
