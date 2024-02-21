@@ -98,16 +98,17 @@ def random_point_in_mpolygon(mpolygon, rng=None, vis=False):
     if isinstance(mpolygon, MultiPolygon):
         polys = np.array(mpolygon.geoms)
 
-        exterior_rings = get_exterior_ring(polys)
-        exterior_polys = np.array(MultiPolygon(zip(exterior_rings, [[]] * exterior_rings.size)).geoms)
+        mpoly_exterior_rings = get_exterior_ring(polys)
+        exterior_polys = np.array(MultiPolygon(zip(mpoly_exterior_rings, [[]] * mpoly_exterior_rings.size)).geoms)
 
         # gather all the interior rings
         num_mpoly_holes = get_num_interior_rings(polys)
-        interior_rings = np.concatenate(
-            [get_interior_ring(polys, i) for i in range(np.max(num_mpoly_holes))]
-        )
-        interior_rings = interior_rings[interior_rings != np.array(None)]
-        interior_polys = np.array(MultiPolygon(zip(interior_rings, [[]] * interior_rings.size)).geoms)
+        max_num_holes = np.max(num_mpoly_holes)
+        mpoly_interior_rings = np.concatenate(
+            [get_interior_ring(polys, i) for i in range(max_num_holes)]
+        ) if max_num_holes > 0 else np.array([])
+        mpoly_interior_rings = mpoly_interior_rings[mpoly_interior_rings != np.array(None)]
+        interior_polys = np.array(MultiPolygon(zip(mpoly_interior_rings, [[]] * mpoly_interior_rings.size)).geoms)
 
         # check nestedness (numpy vectorized brute force)
         _inpolys, _expolys = np.meshgrid(interior_polys, exterior_polys, indexing="ij")
@@ -125,24 +126,25 @@ def random_point_in_mpolygon(mpolygon, rng=None, vis=False):
         interior_points = get_coordinates(point_on_surface(interior_polys))
 
     elif isinstance(mpolygon, Polygon):
-        poly_exteriors = np.array([Polygon(mpolygon.exterior)])
-        mpoly_interiors_as_rings = mpolygon.interiors
+        mpoly_exterior_rings = np.array([mpolygon.exterior])
+        mpoly_interior_rings = mpolygon.interiors
 
         # convert to Polygons (note: this is the most elegant way I can think of rn)
-        mpoly_interiors_as_polys = np.array(MultiPolygon(
-            zip(mpoly_interiors_as_rings, [[]] * len(mpoly_interiors_as_rings))
+        mpoly_interior_polys = np.array(MultiPolygon(
+            zip(mpoly_interior_rings, [[]] * len(mpoly_interior_rings))
         ).geoms)
 
         # finally get the interior representative points so triangle can make holes
-        interior_points = get_coordinates(point_on_surface(mpoly_interiors_as_polys))
+        interior_points = get_coordinates(point_on_surface(mpoly_interior_polys))
     else:
         raise NotImplementedError('Did not implement sampling from: %s.' % str(type(mpolygon)))
 
     # coordinates present in a single list.
-    vertices = get_coordinates(poly_exteriors)
+    mpoly_rings = np.concatenate([mpoly_exterior_rings, mpoly_interior_rings])
+    vertices = get_coordinates(mpoly_rings)
 
     # compute the repeating vertex to delete
-    num_pts_in_polys = get_num_points(poly_exteriors)
+    num_pts_in_polys = get_num_points(mpoly_rings)
     n_polys = num_pts_in_polys.shape[0]
 
     del_vert_indices = np.copy(num_pts_in_polys)

@@ -3,7 +3,7 @@ from nonasymptotic.util import random_point_in_mpolygon, compute_sauer_shelah_bo
 
 from shapely.geometry import Polygon, MultiPolygon, MultiLineString, MultiPoint
 from shapely.plotting import plot_polygon, plot_points
-from shapely import union
+from shapely import union_all
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,6 +21,7 @@ class TestRandomSampling:
                                    [[(-4, -4), (-4, 4), (4, 4), (4, -4)]])
     smaller_square_with_hole = Polygon([(-3, -3), (-3, 3), (3, 3), (3, -3)],
                                        [[(-2, -2), (-2, 2), (2, 2), (2, -2)]])
+    smallest_square = Polygon([(-1, -1), (-1, 1), (1, 1), (1, -1)])
 
     def sample_membership_test(self, geom):
         samples = np.array(
@@ -34,10 +35,10 @@ class TestRandomSampling:
         if not is_member.all():
             errors += "%s is/are not members of geom" % str(samples[is_member])
 
-        fig, ax = plt.subplots()
-        plot_polygon(geom, ax=ax, color='blue')
-        plot_points(MultiPoint(samples), ax=ax, color='green')
-        plt.show()
+        # fig, ax = plt.subplots()
+        # plot_polygon(geom, ax=ax, color='blue')
+        # plot_points(MultiPoint(samples), ax=ax, color='green')
+        # plt.show()
 
         assert not errors
 
@@ -54,8 +55,8 @@ class TestRandomSampling:
         self.sample_membership_test(self.smaller_square_with_hole)
 
     def test_sample_membership_nested_holes(self):
-        self.sample_membership_test(union(
-            self.big_square_with_hole, self.smaller_square_with_hole
+        self.sample_membership_test(union_all(
+            [self.big_square_with_hole, self.smaller_square_with_hole, self.smallest_square]
         ))
 
 
