@@ -11,6 +11,7 @@ import os
 import subprocess
 
 submit_sh_script_prototype_text = """#!/bin/bash
+source /etc/profile
 
 # Load Anaconda Module
 module load anaconda/2022b
