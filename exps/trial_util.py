@@ -114,6 +114,9 @@ def straight_line_trial(delta_clear, dim, rng_seed,
         radius_ubs.append(nn_rads[i_rad_ub])
         info_record.append(info)  # anything else we'd like to record from the run
 
+    # delete temporary data associated with PRM
+    prm.reset()
+
     # construct dataframe and return
     print('Recording data and returning trial...')
     df_record = pd.DataFrame(

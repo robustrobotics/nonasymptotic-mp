@@ -234,8 +234,23 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
         if self._samples is None:  # if new, initialize everything
             self._samples = np.zeros((n_samples, self.d))
 
-        for i in range(n_samples):
-            self._samples[i, :] = self.sample_state()
+            for i in range(n_samples):
+                self._samples[i, :] = self.sample_state()
+        else:
+            past_n_samples = len(self._samples)
+            n_new_samples = n_samples - past_n_samples
+
+            if n_new_samples <= 0:
+                raise ArithmeticError(
+                    'PRM is already %i large, cannot grow to %i samples.' % (past_n_samples, n_samples)
+                )
+
+            new_samples = np.zeros((n_new_samples, self.d))
+
+            for i in range(n_new_samples):
+                new_samples[i, :] = self.sample_state()
+
+            self._samples = np.concatenate([self._samples, new_samples])
 
         # build the index
         # if we are growing the graph, it means that a previous check with a larger radius worked.
