@@ -275,7 +275,7 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
         # returned the certified max and the neighbor dists (since they will be used in experiment runs)
         # it's a bit of a kludge, but we return here so we do not need to duplicate the sorted dists
         # (could make gigabytes of a difference)
-        return self.certified_max_conn_r, np.sort(dists, axis=None)
+        return self.certified_max_conn_r, np.unique(dists, axis=None)
 
     def set_connection_radius(self, new_conn_r):
         # there may be a way to do this with networkit.sparsification, but I can't find it

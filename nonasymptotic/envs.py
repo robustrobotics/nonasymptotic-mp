@@ -99,7 +99,7 @@ class StraightLine(Environment):
         length_tri_points = np.array([(0.0, conn_r), (0.0, 1.0), (1.0 - conn_r, 1.0)])
         length_space_to_cover = Polygon(length_tri_points)
 
-        base_line_points = np.array([(0.0, conn_r), (1.0 - conn_r, 1.0)])
+        # base_line_points = np.array([(0.0, conn_r), (1.0 - conn_r, 1.0)])
         # base_line = LineString(base_line_points)
 
         order_vec = np.array([-np.sqrt(2), np.sqrt(2)]) / 2
@@ -310,7 +310,8 @@ class StraightLine(Environment):
                     if not isinstance(new_coverage, Polygon):
                         continue
 
-                    new_cover_pts_coords = np.array(new_coverage.boundary.coords)[:-1]  # last point and first are the same
+                    new_cover_pts_coords = np.array(new_coverage.boundary.coords)[
+                                           :-1]  # last point and first are the same
                     new_cover_points = np.array(list(
                         map(lambda cds: Point(cds), new_cover_pts_coords)
                     ))
@@ -336,7 +337,6 @@ class StraightLine(Environment):
                     plot_polygon(length_space_to_cover, color='red')
                     plot_polygon(cover_union, color='blue')
                     plt.show()
-
 
             # continue until timeout (where we confirm or deny? decide). or if we're covered return true
             # or if we don't have an admissible solution, return false.
