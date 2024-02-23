@@ -27,7 +27,7 @@ if __name__ == '__main__':
         big_out.to_csv(latest_exp_dir + '/' + args.name_prefix + '_agg_out.csv')
 
     # time statistics (exclude first run since that requires jitting)
-    mini_out_dfs_cut = list(map(lambda df: df.drop(index=0), mini_out_dfs))
+    mini_out_dfs_cut = list(map(lambda df: df.tail(df.shape[0] - 1), mini_out_dfs))
     cut_big_out = pd.concat(mini_out_dfs_cut)
     build_mean = cut_big_out['build_time'].mean()
     build_std = cut_big_out['build_time'].std()
