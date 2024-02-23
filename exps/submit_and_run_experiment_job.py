@@ -26,7 +26,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--name", type=str, required=True,
                         help="Name of the experiment.")
-    parser.add_argument("--config-path", type=str,
+    parser.add_argument("--config-path", type=str, required=True,
                         help="Path to the config file with experiment params.")
     parser.add_argument("--triples-args", type=int, nargs=3, required=True,
                         help="The three integers that dictate the SuperCloud triples configuration "

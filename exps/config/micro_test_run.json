@@ -5,6 +5,6 @@
   "n_samples_per_check_round": 100,
   "ed_check_timeout": 60.0,
   "area_tol": 1e-8,
-  "prm_max_k_neighbors": 1024,
+  "prm_max_k_neighbors": 4,
   "n_trials": 5
 }

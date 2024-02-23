@@ -29,8 +29,13 @@ if __name__ == '__main__':
     # time statistics (exclude first run since that requires jitting)
     mini_out_dfs_cut = list(map(lambda df: df.drop(index=0), mini_out_dfs))
     cut_big_out = pd.concat(mini_out_dfs_cut)
-    mean = cut_big_out['time'].mean()
-    std = cut_big_out['time'].std()
+    build_mean = cut_big_out['build_time'].mean()
+    build_std = cut_big_out['build_time'].std()
 
-    print('Trial exec time mean: %f +/- %f' % (mean, std))
+    check_mean = cut_big_out['check_time'].mean()
+    check_std = cut_big_out['check_time'].std()
+
+
+    print('Trial build time mean: %f +/- %f' % (build_mean, build_std))
+    print('Trial check time mean: %f +/- %f' % (check_mean, check_std))
 

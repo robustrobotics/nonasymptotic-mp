@@ -3,8 +3,8 @@
   "sample_schedule": [1000000],
   "dims_to_test": [10],
   "n_samples_per_check_round": 100,
-  "ed_check_timeout": 60.0,
+  "ed_check_timeout": 300.0,
   "area_tol": 1e-8,
-  "prm_max_k_neighbors": 4096,
+  "prm_max_k_neighbors": 256,
   "n_trials": 48
 }
