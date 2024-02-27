@@ -12,14 +12,13 @@ from pybullet_tools.pr2_primitives import Conf, control_commands, apply_commands
 from pybullet_tools.utils import connect, disconnect, has_gui, LockRenderer, WorldSaver, wait_if_gui, joint_from_name
 from streams import get_motion_fn, get_base_joints
 from nonasymptotic.util import compute_numerical_bound
-from problems import rovers1
+from problems import random_obstacles, hallway, BOT_RADIUS
 import random
 import time
 import numpy as np
 import logging
 import os
 
-BOT_RADIUS = 0.179
 
 class StreamToLogger:
     def __init__(self, logger, log_level):
@@ -145,11 +144,14 @@ def main():
         np.random.seed(args.seed)
     
     robot_scale = random.uniform(0.5, 2.0)
-    rovers_problem = rovers1(robot_scale=robot_scale)
+    # rovers_problem = random_obstacles(robot_scale=robot_scale)
+    rovers_problem = hallway(robot_scale=robot_scale)
+
     max_samples = args.max_samples
-    delta = BOT_RADIUS*robot_scale
+    delta = BOT_RADIUS*robot_scale/2.0
+    connect_radius = 2
     if(args.adaptive_n):
-        max_samples, connect_radius = compute_numerical_bound(delta, 0.001, 4, 2, None)
+        max_samples, connect_radius = compute_numerical_bound(delta, 0.9, 4, 2, None)
     
     print("Delta: "+str(delta))
     print("Max samples: "+str(max_samples))
