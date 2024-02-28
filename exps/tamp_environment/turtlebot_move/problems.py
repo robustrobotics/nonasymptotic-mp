@@ -3,8 +3,9 @@ import numpy as np
 from collections import OrderedDict
 from pybullet_tools.utils import set_point, Point, create_box, \
     stable_z, load_model, TURTLEBOT_URDF, joints_from_names, \
-    set_joint_positions, get_joint_positions, remove_body, HideOutput, \
-    GREY, TAN, get_bodies, pairwise_collision, sample_placement, get_aabb, wait_if_gui
+    set_joint_positions, get_joint_positions, remove_body, \
+    GREY, TAN, get_bodies, pairwise_collision, sample_placement, get_aabb
+from pybullet_tools.pr2_primitives import Conf
 import random
 
 BOT_RADIUS = 0.179
@@ -44,8 +45,9 @@ KINECT_FRAME = 'camera_rgb_optical_frame' # eyes
 #######################################################
 
 class RoversProblem(object):
-    def __init__(self, rover=None, landers=[], objectives=[], rocks=[], soils=[], stores=[], limits=[], body_types=[], goal_conf=None):
+    def __init__(self, rover=None, landers=[], objectives=[], rocks=[], soils=[], stores=[], limits=[], body_types=[], init_conf=None, goal_conf=None):
         self.rover = rover
+        self.init_conf = init_conf
         self.goal_conf = goal_conf
         self.landers = landers
         self.objectives = objectives
@@ -59,7 +61,7 @@ class RoversProblem(object):
         self.costs = False
 
 #######################################################
-def hallway(robot_scale=1, dd=0.5):
+def hallway(robot_scale=1, dd=0.05):
     base_extent = 3.0
     base_limits = (-base_extent/2.*np.ones(2), base_extent/2.*np.ones(2))
     mound_height = 0.1
@@ -81,8 +83,7 @@ def hallway(robot_scale=1, dd=0.5):
     
     robot_width = BOT_RADIUS*robot_scale
     offset = robot_width + mound_height
-    rover_conf = (base_extent/2.0-offset, -base_extent/2.0+offset, np.pi)
-    goal_conf = (-base_extent/2.0+offset, base_extent/2.0-offset, 0)
+    
     
     box_width = (base_extent/2.0-(mound_height+2*robot_width))*2-dd
     body = create_box(box_width, box_width, mound_height*4, color=GREY)
@@ -90,19 +91,20 @@ def hallway(robot_scale=1, dd=0.5):
     
     rover = load_model(TURTLEBOT_URDF, scale=robot_scale)
     rover2 = load_model(TURTLEBOT_URDF, scale=robot_scale)
-    print(get_aabb(rover2))
-        
+    
+    base_joints = get_base_joints(rover)
+    init_conf = Conf(rover, base_joints[:2], (base_extent/2.0-offset, -base_extent/2.0+offset))
+    goal_conf =  Conf(rover, base_joints[:2], (-base_extent/2.0+offset, base_extent/2.0-offset))
     robot_z = stable_z(rover, floor)
     set_point(rover, Point(z=robot_z))
-    set_base_conf(rover, rover_conf)
+    init_conf.assign()
     
     robot2_z = stable_z(rover2, floor)
     set_point(rover2, Point(z=robot2_z))
-    set_base_conf(rover2, goal_conf)
+    goal_conf.assign()
 
-    # wait_if_gui()
     remove_body(rover2)
-    return RoversProblem(rover, limits=base_limits, body_types=body_types, goal_conf=goal_conf)
+    return RoversProblem(rover, limits=base_limits, body_types=body_types, init_conf=init_conf, goal_conf=goal_conf)
 
 
 def random_obstacles(n_obstacles=50, robot_scale=1):
@@ -128,22 +130,25 @@ def random_obstacles(n_obstacles=50, robot_scale=1):
         body = create_box(mound_height, mound_height, 4*mound_height, color=GREY)
         initial_surfaces[body] = floor
 
-    rover_conf = (+1.75, -1.75, np.pi)
-    goal_conf = (-1.75, 1.75, 0)
     
     rover = load_model(TURTLEBOT_URDF, scale=robot_scale)
     rover2 = load_model(TURTLEBOT_URDF, scale=2.0)
-    print(get_aabb(rover2))
-        
+    
+    base_joints = get_base_joints(rover)
+    init_conf = Conf(rover, base_joints, (+1.75, -1.75, np.pi))
+    goal_conf =  Conf(rover, base_joints, (-1.75, 1.75, 0))
+    
+    
     robot_z = stable_z(rover, floor)
     set_point(rover, Point(z=robot_z))
-    set_base_conf(rover, rover_conf)
+    set_base_conf(rover, init_conf.values)
     
     robot2_z = stable_z(rover2, floor)
     set_point(rover2, Point(z=robot2_z))
-    set_base_conf(rover2, goal_conf)
+    set_base_conf(rover2, goal_conf.values)
+
 
     
     sample_placements(initial_surfaces, obstacles=[rover, rover2])
     remove_body(rover2)
-    return RoversProblem(rover, limits=base_limits, body_types=body_types, goal_conf=goal_conf)
+    return RoversProblem(rover, limits=base_limits, body_types=body_types, init_conf=init_conf, goal_conf=goal_conf)

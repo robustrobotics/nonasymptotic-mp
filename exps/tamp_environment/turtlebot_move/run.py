@@ -8,11 +8,11 @@ from pddlstream.language.constants import And, print_solution, PDDLProblem
 from pddlstream.language.stream import StreamInfo
 from pddlstream.language.generator import from_fn
 from pddlstream.utils import read, INF, get_file_path
-from pybullet_tools.pr2_primitives import Conf, control_commands, apply_commands, State
+from pybullet_tools.pr2_primitives import control_commands, apply_commands, State
 from pybullet_tools.utils import connect, disconnect, has_gui, LockRenderer, WorldSaver, wait_if_gui, joint_from_name
-from streams import get_motion_fn, get_base_joints
+from streams import get_motion_fn
 from nonasymptotic.util import compute_numerical_bound
-from problems import random_obstacles, hallway, BOT_RADIUS
+from problems import hallway, random_obstacles, BOT_RADIUS
 import random
 import time
 import numpy as np
@@ -76,10 +76,9 @@ def pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=N
 
     init = []
     goal_literals = []
-    base_joints = get_base_joints(problem.rover)
     
-    q0 = Conf(problem.rover, base_joints)
-    goal_conf = Conf(problem.rover, base_joints, values=problem.goal_conf)
+    q0 = problem.init_conf
+    goal_conf = problem.goal_conf
     
     init += [('Rover', problem.rover), ('Conf', problem.rover, q0), ('AtConf', problem.rover, q0), ("Conf", problem.rover, goal_conf)]
     goal_literals += [('AtConf', problem.rover, goal_conf)]
@@ -121,7 +120,7 @@ def main():
     parser.add_argument('-deterministic', action='store_true', help='Uses a deterministic sampler')
     parser.add_argument('-optimal', action='store_true', help='Runs in an anytime mode')
     parser.add_argument('-t', '--max-time', default=240, type=int, help='The max time')
-    parser.add_argument('-ms', '--max-samples', default=100, type=int, help='Max num samples for motion planning')
+    parser.add_argument('-ms', '--max-samples', default=2000, type=int, help='Max num samples for motion planning')
     parser.add_argument('-mp_alg', '--mp-alg', default="prm", type=str, help='Algorithm to use for motion planning')
     parser.add_argument('-seed', '--seed', default=-1, type=int, help='Seed for selection of robot size and collision placement')
     parser.add_argument('-sd', '--save-dir', default="./logs/debug", type=str, help='Directory to save planning results')
@@ -144,12 +143,12 @@ def main():
         np.random.seed(args.seed)
     
     robot_scale = random.uniform(0.5, 2.0)
-    # rovers_problem = random_obstacles(robot_scale=robot_scale)
-    rovers_problem = hallway(robot_scale=robot_scale)
+    rovers_problem = random_obstacles(robot_scale=robot_scale)
+    # rovers_problem = hallway(robot_scale=robot_scale)
 
     max_samples = args.max_samples
     delta = BOT_RADIUS*robot_scale/2.0
-    connect_radius = 2
+    connect_radius = 0.1
     if(args.adaptive_n):
         max_samples, connect_radius = compute_numerical_bound(delta, 0.9, 4, 2, None)
     
@@ -158,7 +157,7 @@ def main():
     print("Connection radius: "+str(connect_radius))
     
     pddlstream_problem = pddlstream_from_problem(rovers_problem, collisions=not args.cfree, teleport=args.teleport,
-                                                 holonomic=False, reversible=True, use_aabb=True, max_samples=max_samples, 
+                                                 holonomic=True, reversible=True, use_aabb=True, max_samples=max_samples, 
                                                  connect_radius=connect_radius,
                                                  mp_alg=args.mp_alg)
     print(pddlstream_problem)
