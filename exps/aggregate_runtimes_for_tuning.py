@@ -35,7 +35,5 @@ if __name__ == '__main__':
     check_mean = cut_big_out['check_time'].mean()
     check_std = cut_big_out['check_time'].std()
 
-
     print('Trial build time mean: %f +/- %f' % (build_mean, build_std))
     print('Trial check time mean: %f +/- %f' % (check_mean, check_std))
-
