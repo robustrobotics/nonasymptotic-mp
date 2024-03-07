@@ -6,7 +6,7 @@ from pybullet_tools.utils import get_point, get_custom_limits, all_between, pair
     plan_joint_motion, joints_from_names, set_pose, \
     remove_body, get_visual_data, get_pose, \
     wait_for_duration, create_body, visual_shape_from_data, LockRenderer, plan_nonholonomic_motion, \
-    child_link_from_joint, Attachment, OOBB, get_oobb, get_oobb_vertices
+    child_link_from_joint, Attachment, OOBB, get_oobb, get_oobb_vertices, Pose, AABB, get_aabb, Point
 from pybullet_tools.separating_axis import separating_axis_theorem
 from pddlstream.language.constants import Output
 
@@ -14,6 +14,7 @@ from nonasymptotic.envs import Environment
 from nonasymptotic.prm import SimpleNearestNeighborRadiusPRM
 from typing import Tuple, List
 from dataclasses import dataclass
+import random
 
 VIS_RANGE = 2
 COM_RANGE = 2*VIS_RANGE
@@ -105,19 +106,30 @@ def get_above_gen(problem, max_attempts=1, custom_limits={}, collisions=True, **
 
 class BagOfBoundingBoxes(Environment):
 
-    def __init__(self, seed, robot_shape:OOBB, boxes:List[OOBB]):
-        self.obstacles = boxes
+    def __init__(self, seed, robot_shape:AABB, obstacle_oobbs:List[OOBB], custom_limits):
+        self.obstacles = obstacle_oobbs
         self.robot_shape = robot_shape
+        self.custom_limits = custom_limits
         self.rng = np.random.default_rng(seed)
 
     def sample_from_env(self):
-        raise NotImplementedError
+        return np.array([random.uniform(v[0], v[1]) for _, v in self.custom_limits.items()])
 
     def arclength_to_curve_point(self, t_normed):
         raise NotImplementedError
 
     def is_motion_valid(self, start, goal):
-        raise NotImplementedError
+        print(start)
+        print(goal)
+        start_oobb = OOBB(self.robot_shape, Pose(Point(x=start[0], y=start[1], z=0)))
+        goal_oobb = OOBB(self.robot_shape, Pose(Point(x=goal[0], y=goal[1], z=0)))
+        
+        for obstacle in self.obstacles:
+            ov = get_oobb_vertices(obstacle)
+            if not separating_axis_theorem(get_oobb_vertices(start_oobb), ov) \
+                or not separating_axis_theorem(get_oobb_vertices(goal_oobb), ov):
+                return False
+        return True
 
     def is_prm_epsilon_delta_complete(self, prm, tol):
         raise NotImplementedError
@@ -128,16 +140,14 @@ class BagOfBoundingBoxes(Environment):
 def get_nonasy_motion_fn(problem, custom_limits={}, collisions=True, teleport=False, holonomic=False, reversible=False, algorithm="prm", num_samples=10, connect_radius=None, **kwargs):
     
     def test(rover, q1, q2, fluents=[]):
-        # start = np.array(q1.values)
-        # goal = np.array(q2.values)
-        start = np.array([0.2, 0.00])
-        goal = np.array([0.5, 0.0])
+        start = np.array(q1.values)
+        goal = np.array(q2.values)
+        
         seed = 0
         
         obstacles = set(problem.fixed)
         obstacle_oobbs = [get_oobb(obstacle) for obstacle in obstacles]
-        prm_env_2d = BagOfBoundingBoxes(obstacle_oobbs)
-        
+        prm_env_2d = BagOfBoundingBoxes(seed=seed, robot_shape=get_aabb(rover), obstacle_oobbs=obstacle_oobbs, custom_limits=custom_limits)
         prm = SimpleNearestNeighborRadiusPRM(32, 
                                      prm_env_2d.is_motion_valid, 
                                      prm_env_2d.sample_from_env, 
