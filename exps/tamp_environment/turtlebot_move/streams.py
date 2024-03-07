@@ -6,8 +6,14 @@ from pybullet_tools.utils import get_point, get_custom_limits, all_between, pair
     plan_joint_motion, joints_from_names, set_pose, \
     remove_body, get_visual_data, get_pose, \
     wait_for_duration, create_body, visual_shape_from_data, LockRenderer, plan_nonholonomic_motion, \
-    child_link_from_joint, Attachment
+    child_link_from_joint, Attachment, OOBB, get_oobb, get_oobb_vertices
+from pybullet_tools.separating_axis import separating_axis_theorem
 from pddlstream.language.constants import Output
+
+from nonasymptotic.envs import Environment
+from nonasymptotic.prm import SimpleNearestNeighborRadiusPRM
+from typing import Tuple, List
+from dataclasses import dataclass
 
 VIS_RANGE = 2
 COM_RANGE = 2*VIS_RANGE
@@ -96,6 +102,58 @@ def get_above_gen(problem, max_attempts=1, custom_limits={}, collisions=True, **
     return gen
 
 #######################################################
+
+class BagOfBoundingBoxes(Environment):
+
+    def __init__(self, seed, robot_shape:OOBB, boxes:List[OOBB]):
+        self.obstacles = boxes
+        self.robot_shape = robot_shape
+        self.rng = np.random.default_rng(seed)
+
+    def sample_from_env(self):
+        raise NotImplementedError
+
+    def arclength_to_curve_point(self, t_normed):
+        raise NotImplementedError
+
+    def is_motion_valid(self, start, goal):
+        raise NotImplementedError
+
+    def is_prm_epsilon_delta_complete(self, prm, tol):
+        raise NotImplementedError
+
+    def distance_to_path(self, query_points):
+        raise NotImplementedError
+    
+def get_nonasy_motion_fn(problem, custom_limits={}, collisions=True, teleport=False, holonomic=False, reversible=False, algorithm="prm", num_samples=10, connect_radius=None, **kwargs):
+    
+    def test(rover, q1, q2, fluents=[]):
+        # start = np.array(q1.values)
+        # goal = np.array(q2.values)
+        start = np.array([0.2, 0.00])
+        goal = np.array([0.5, 0.0])
+        seed = 0
+        
+        obstacles = set(problem.fixed)
+        obstacle_oobbs = [get_oobb(obstacle) for obstacle in obstacles]
+        prm_env_2d = BagOfBoundingBoxes(obstacle_oobbs)
+        
+        prm = SimpleNearestNeighborRadiusPRM(32, 
+                                     prm_env_2d.is_motion_valid, 
+                                     prm_env_2d.sample_from_env, 
+                                     prm_env_2d.distance_to_path, 
+                                     seed=seed, verbose=False)
+        prm.grow_to_n_samples(1000)
+        d, path = prm.query_best_solution(start, goal)
+        
+        # if(path is None):
+        #     return None
+        path = np.concatenate([np.expand_dims(start, axis=0), path, np.expand_dims(goal, axis=0)], axis=0).tolist()
+        ht = create_trajectory(rover, q2.joints, path)
+        return Output(ht)
+        
+    return test
+
 
 def get_motion_fn(problem, custom_limits={}, collisions=True, teleport=False, holonomic=False, reversible=False, algorithm="prm", num_samples=10, connect_radius=None, **kwargs):
     def test(rover, q1, q2, fluents=[]):
