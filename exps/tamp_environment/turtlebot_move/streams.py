@@ -128,7 +128,6 @@ class BagOfBoundingBoxes(Environment):
     def arclength_to_curve_point(self, t_normed):
         raise NotImplementedError
 
-
     def oobb_flat_vertices(self, oobb):
         diff_thresh = 0.001
         verts = get_oobb_vertices(oobb)
@@ -204,7 +203,10 @@ def get_nonasy_motion_fn(problem, custom_limits={}, collisions=True, teleport=Fa
                                      prm_env_2d.sample_from_env, 
                                      prm_env_2d.distance_to_path, 
                                      seed=seed, verbose=False)
-        prm.grow_to_n_samples(1000)
+        
+        assert prm_env_2d.is_motion_valid(np.expand_dims(start, axis=0), np.expand_dims(start, axis=0)), "Start in collision"
+        assert prm_env_2d.is_motion_valid(np.expand_dims(goal, axis=0), np.expand_dims(goal, axis=0)), "Goal in collision"
+        prm.grow_to_n_samples(num_samples)
         d, path = prm.query_best_solution(start, goal)
         
         # if(path is None):

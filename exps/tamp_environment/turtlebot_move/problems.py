@@ -139,8 +139,6 @@ def random_obstacles(n_obstacles=50, robot_scale=1):
     set_point(rover2, Point(z=robot2_z))
     set_base_conf(rover2, goal_conf.values)
 
-
-    
     sample_placements(initial_surfaces, obstacles=[rover, rover2])
     remove_body(rover2)
     return RoversProblem(rover, limits=base_limits, body_types=body_types, init_conf=init_conf, goal_conf=goal_conf)
