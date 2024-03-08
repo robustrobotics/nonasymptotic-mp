@@ -9,10 +9,12 @@ from pybullet_tools.utils import get_point, get_custom_limits, all_between, pair
     child_link_from_joint, Attachment, OOBB, get_oobb, get_oobb_vertices, Pose, AABB, get_aabb, Point
 from pybullet_tools.separating_axis import separating_axis_theorem
 from pddlstream.language.constants import Output
-
+from matplotlib.patches import Polygon
+from matplotlib.collections import PatchCollection
 from nonasymptotic.envs import Environment
 from nonasymptotic.prm import SimpleNearestNeighborRadiusPRM
 from typing import Tuple, List
+import matplotlib.pyplot as plt
 from dataclasses import dataclass
 import random
 
@@ -140,11 +142,24 @@ class BagOfBoundingBoxes(Environment):
         for i in range(start.shape[0]):
             start_oobb = self.oobb_flat_vertices(OOBB(self.robot_shape, Pose(Point(x=start[i, 0], y=start[i, 1], z=0))))
             goal_oobb = self.oobb_flat_vertices(OOBB(self.robot_shape, Pose(Point(x=goal[i, 0], y=goal[i, 1], z=0))))
+            start_polygon = Polygon(start_oobb, True, color="blue")
+            goal_polygon = Polygon(goal_oobb, True, color="green")
+            fig, ax = plt.subplots()
+            ax.add_patch(start_polygon)
+            ax.add_patch(goal_polygon)
             for obstacle in self.obstacles:
                 ov = self.oobb_flat_vertices(obstacle)
+                ax.add_patch(start_polygon)
+                obstacle_polygon = Polygon(ov, True, color="gray")
+                ax.add_patch(obstacle_polygon)
                 if not separating_axis_theorem(start_oobb, ov) \
                     or not separating_axis_theorem(goal_oobb, ov):
+                    print("SAT Fail")
+                    plt.show()
                     return False
+                
+        print("Sat success")
+        plt.show()
         return True
 
     def is_prm_epsilon_delta_complete(self, prm, tol):
