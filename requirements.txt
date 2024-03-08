@@ -1,3 +1,4 @@
+Cython
 numpy~=1.24.3
 sympy~=1.12
 pytest~=7.4.0

@@ -4,18 +4,18 @@ import numpy as np
 from pybullet_tools.pr2_primitives import Conf, Trajectory, create_trajectory, Command
 from pybullet_tools.utils import get_point, get_custom_limits, all_between, pairwise_collision, \
     plan_joint_motion, joints_from_names, set_pose, \
-    remove_body, get_visual_data, get_pose, \
+    remove_body, get_visual_data, get_pose, get_aabb_extent, aabb_from_extent_center,\
     wait_for_duration, create_body, visual_shape_from_data, LockRenderer, plan_nonholonomic_motion, \
     child_link_from_joint, Attachment, OOBB, get_oobb, get_oobb_vertices, Pose, AABB, get_aabb, Point
 from pybullet_tools.separating_axis import separating_axis_theorem
 from pddlstream.language.constants import Output
 from matplotlib.patches import Polygon
-from matplotlib.collections import PatchCollection
 from nonasymptotic.envs import Environment
 from nonasymptotic.prm import SimpleNearestNeighborRadiusPRM
-from typing import Tuple, List
+from typing import List
 import matplotlib.pyplot as plt
-from dataclasses import dataclass
+from scipy.spatial import ConvexHull
+from tqdm import tqdm
 import random
 
 VIS_RANGE = 2
@@ -23,6 +23,14 @@ COM_RANGE = 2*VIS_RANGE
 
 BASE_JOINTS = ['x', 'y', 'theta']
 
+
+# Function to reorder vertices to form a convex hull
+def hull(vertices):
+    # Compute the convex hull
+    hull = ConvexHull(vertices)
+    # Reorder vertices according to the hull vertices
+    ordered_vertices = [vertices[index] for index in hull.vertices]
+    return ordered_vertices
 
 def get_base_joints(robot):
     return joints_from_names(robot, BASE_JOINTS)
@@ -139,28 +147,38 @@ class BagOfBoundingBoxes(Environment):
         return verts2d
     
     def is_motion_valid(self, start, goal):
-        for i in range(start.shape[0]):
-            start_oobb = self.oobb_flat_vertices(OOBB(self.robot_shape, Pose(Point(x=start[i, 0], y=start[i, 1], z=0))))
-            goal_oobb = self.oobb_flat_vertices(OOBB(self.robot_shape, Pose(Point(x=goal[i, 0], y=goal[i, 1], z=0))))
-            start_polygon = Polygon(start_oobb, True, color="blue")
-            goal_polygon = Polygon(goal_oobb, True, color="green")
-            fig, ax = plt.subplots()
-            ax.add_patch(start_polygon)
-            ax.add_patch(goal_polygon)
+        
+        
+        valids = np.ones(start.shape[0])
+        for i in tqdm(range(start.shape[0])):
+            # fig, ax = plt.subplots()
+        
+            # plt.ylim(-2, 2)
+            # plt.xlim(-2, 2)
+            start_oobb = hull(self.oobb_flat_vertices(OOBB(self.robot_shape, Pose(Point(x=start[i, 0], y=start[i, 1], z=0)))))
+            goal_oobb = hull(self.oobb_flat_vertices(OOBB(self.robot_shape, Pose(Point(x=goal[i, 0], y=goal[i, 1], z=0)))))
+            # start_polygon = Polygon(start_oobb, True, color="blue")
+            # goal_polygon = Polygon(goal_oobb, True, color="green")
+            # print("Start goal")
+            # print(start[i,:], goal[i,:])
+            # print(start_oobb)
+            # print(goal_oobb)
+            # ax.add_patch(start_polygon)
+            # ax.add_patch(goal_polygon)
+
             for obstacle in self.obstacles:
-                ov = self.oobb_flat_vertices(obstacle)
-                ax.add_patch(start_polygon)
-                obstacle_polygon = Polygon(ov, True, color="gray")
-                ax.add_patch(obstacle_polygon)
-                if not separating_axis_theorem(start_oobb, ov) \
-                    or not separating_axis_theorem(goal_oobb, ov):
-                    print("SAT Fail")
-                    plt.show()
-                    return False
-                
-        print("Sat success")
-        plt.show()
-        return True
+                ov = hull(self.oobb_flat_vertices(obstacle))
+                # obstacle_polygon = Polygon(ov, True, fill=False, color="gray")
+                # ax.add_patch(obstacle_polygon)
+                if separating_axis_theorem(start_oobb, ov) \
+                    or  separating_axis_theorem(goal_oobb, ov):
+                    valids[i] = 0
+            
+            # plt.show()
+        # print(np.sum(valids))
+        # import sys
+        # sys.exit()
+        return valids.astype(bool)
 
     def is_prm_epsilon_delta_complete(self, prm, tol):
         raise NotImplementedError
@@ -177,9 +195,10 @@ def get_nonasy_motion_fn(problem, custom_limits={}, collisions=True, teleport=Fa
         
         seed = 0
         
-        obstacles = set(problem.fixed)
+        obstacles = set(problem.obstacles)
         obstacle_oobbs = [get_oobb(obstacle) for obstacle in obstacles]
-        prm_env_2d = BagOfBoundingBoxes(seed=seed, robot_shape=get_aabb(rover), obstacle_oobbs=obstacle_oobbs, custom_limits=custom_limits)
+        robot_shape = aabb_from_extent_center(get_aabb_extent(get_aabb(rover)))
+        prm_env_2d = BagOfBoundingBoxes(seed=seed, robot_shape=(robot_shape), obstacle_oobbs=obstacle_oobbs, custom_limits=custom_limits)
         prm = SimpleNearestNeighborRadiusPRM(32, 
                                      prm_env_2d.is_motion_valid, 
                                      prm_env_2d.sample_from_env, 

@@ -10,9 +10,9 @@ from pddlstream.language.generator import from_fn
 from pddlstream.utils import read, INF, get_file_path
 from pybullet_tools.pr2_primitives import control_commands, apply_commands, State
 from pybullet_tools.utils import connect, disconnect, has_gui, LockRenderer, WorldSaver, wait_if_gui, joint_from_name
-from streams import get_motion_fn, get_nonasy_motion_fn
+from streams import get_nonasy_motion_fn
 from nonasymptotic.util import compute_numerical_bound
-from problems import hallway, random_obstacles, BOT_RADIUS
+from problems import hallway, BOT_RADIUS
 import random
 import time
 import numpy as np
@@ -142,8 +142,7 @@ def main():
         random.seed(args.seed)
         np.random.seed(args.seed)
     
-    robot_scale = random.uniform(0.5, 2.0)
-    # rovers_problem = random_obstacles(robot_scale=robot_scale)
+    robot_scale = 0.5
     rovers_problem = hallway(robot_scale=robot_scale)
 
     max_samples = args.max_samples

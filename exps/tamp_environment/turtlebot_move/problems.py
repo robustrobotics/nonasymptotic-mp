@@ -45,23 +45,17 @@ KINECT_FRAME = 'camera_rgb_optical_frame' # eyes
 #######################################################
 
 class RoversProblem(object):
-    def __init__(self, rover=None, landers=[], objectives=[], rocks=[], soils=[], stores=[], limits=[], body_types=[], init_conf=None, goal_conf=None):
+    def __init__(self, rover=None, obstacles=[], limits=[], body_types=[], init_conf=None, goal_conf=None):
         self.rover = rover
         self.init_conf = init_conf
         self.goal_conf = goal_conf
-        self.landers = landers
-        self.objectives = objectives
-        self.rocks = rocks
-        self.soils = soils
-        self.stores = stores
         self.limits = limits
-        no_collisions = [self.rover] + self.rocks
-        self.fixed = set(get_bodies()) - set(no_collisions)
+        self.obstacles=obstacles
         self.body_types = body_types
         self.costs = False
 
 #######################################################
-def hallway(robot_scale=1, dd=0.05):
+def hallway(robot_scale=0.2, dd=0.1):
     base_extent = 3.0
     base_limits = (-base_extent/2.*np.ones(2), base_extent/2.*np.ones(2))
     mound_height = 0.1
@@ -78,6 +72,8 @@ def hallway(robot_scale=1, dd=0.05):
     wall4 = create_box(mound_height, base_extent + mound_height, mound_height, color=GREY)
     set_point(wall4, Point(x=-base_extent/2., z=mound_height/2.))
 
+    obstacles = [wall1, wall2, wall3, wall4]
+
     body_types = []
     initial_surfaces = OrderedDict()
     
@@ -88,9 +84,10 @@ def hallway(robot_scale=1, dd=0.05):
     box_width = (base_extent/2.0-(mound_height+2*robot_width))*2-dd
     body = create_box(box_width, box_width, mound_height*4, color=GREY)
     initial_surfaces[body] = floor
+
+    obstacles.append(body)
     
     rover = load_model(TURTLEBOT_URDF, scale=robot_scale)
-    rover2 = load_model(TURTLEBOT_URDF, scale=robot_scale)
     
     base_joints = get_base_joints(rover)
     init_conf = Conf(rover, base_joints[:2], (base_extent/2.0-offset, -base_extent/2.0+offset))
@@ -98,13 +95,8 @@ def hallway(robot_scale=1, dd=0.05):
     robot_z = stable_z(rover, floor)
     set_point(rover, Point(z=robot_z))
     init_conf.assign()
-    
-    robot2_z = stable_z(rover2, floor)
-    set_point(rover2, Point(z=robot2_z))
-    goal_conf.assign()
 
-    remove_body(rover2)
-    return RoversProblem(rover, limits=base_limits, body_types=body_types, init_conf=init_conf, goal_conf=goal_conf)
+    return RoversProblem(rover, limits=base_limits, body_types=body_types, init_conf=init_conf, goal_conf=goal_conf, obstacles=obstacles)
 
 
 def random_obstacles(n_obstacles=50, robot_scale=1):
