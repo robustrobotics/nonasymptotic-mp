@@ -118,24 +118,41 @@ class BagOfBoundingBoxes(Environment):
     def arclength_to_curve_point(self, t_normed):
         raise NotImplementedError
 
+
+    def oobb_flat_vertices(self, oobb):
+        diff_thresh = 0.001
+        verts = get_oobb_vertices(oobb)
+        verts2d = []
+        for vert in verts:
+            unique = True
+            for vert2d in verts2d:
+                if (
+                    np.linalg.norm(np.array(vert[:2]) - np.array(vert2d[:2]))
+                    < diff_thresh
+                ):
+                    unique = False
+            if unique:
+                verts2d.append(vert[:2])
+        assert len(verts2d) == 4
+        return verts2d
+    
     def is_motion_valid(self, start, goal):
-        print(start)
-        print(goal)
-        start_oobb = OOBB(self.robot_shape, Pose(Point(x=start[0], y=start[1], z=0)))
-        goal_oobb = OOBB(self.robot_shape, Pose(Point(x=goal[0], y=goal[1], z=0)))
-        
-        for obstacle in self.obstacles:
-            ov = get_oobb_vertices(obstacle)
-            if not separating_axis_theorem(get_oobb_vertices(start_oobb), ov) \
-                or not separating_axis_theorem(get_oobb_vertices(goal_oobb), ov):
-                return False
+        for i in range(start.shape[0]):
+            start_oobb = self.oobb_flat_vertices(OOBB(self.robot_shape, Pose(Point(x=start[i, 0], y=start[i, 1], z=0))))
+            goal_oobb = self.oobb_flat_vertices(OOBB(self.robot_shape, Pose(Point(x=goal[i, 0], y=goal[i, 1], z=0))))
+            for obstacle in self.obstacles:
+                ov = self.oobb_flat_vertices(obstacle)
+                if not separating_axis_theorem(start_oobb, ov) \
+                    or not separating_axis_theorem(goal_oobb, ov):
+                    return False
         return True
 
     def is_prm_epsilon_delta_complete(self, prm, tol):
         raise NotImplementedError
 
-    def distance_to_path(self, query_points):
-        raise NotImplementedError
+    def distance_to_path(self, points):
+        return np.zeros((points.shape[0], ))
+    
     
 def get_nonasy_motion_fn(problem, custom_limits={}, collisions=True, teleport=False, holonomic=False, reversible=False, algorithm="prm", num_samples=10, connect_radius=None, **kwargs):
     
@@ -158,6 +175,8 @@ def get_nonasy_motion_fn(problem, custom_limits={}, collisions=True, teleport=Fa
         
         # if(path is None):
         #     return None
+        print("planning path: ")
+        print(path)
         path = np.concatenate([np.expand_dims(start, axis=0), path, np.expand_dims(goal, axis=0)], axis=0).tolist()
         ht = create_trajectory(rover, q2.joints, path)
         return Output(ht)
