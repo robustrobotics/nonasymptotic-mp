@@ -4,7 +4,7 @@ from collections import OrderedDict
 from pybullet_tools.utils import set_point, Point, create_box, \
     stable_z, load_model, TURTLEBOT_URDF, joints_from_names, \
     set_joint_positions, get_joint_positions, remove_body, \
-    GREY, TAN, get_bodies, pairwise_collision, sample_placement, get_aabb
+    GREY, TAN, get_bodies, pairwise_collision, sample_placement, wait_if_gui
 from pybullet_tools.pr2_primitives import Conf
 import random
 
@@ -56,6 +56,133 @@ class RoversProblem(object):
 
 #######################################################
 def hallway(robot_scale=0.2, dd=0.1):
+    base_extent = 3.0
+    base_limits = (-base_extent/2.*np.ones(2), base_extent/2.*np.ones(2))
+    mound_height = 0.1
+
+    floor = create_box(base_extent, base_extent, 0.001, color=TAN) # TODO: two rooms
+    set_point(floor, Point(z=-0.001/2.))
+
+    wall1 = create_box(base_extent + mound_height, mound_height, mound_height, color=GREY)
+    set_point(wall1, Point(y=base_extent/2., z=mound_height/2.))
+    wall2 = create_box(base_extent + mound_height, mound_height, mound_height, color=GREY)
+    set_point(wall2, Point(y=-base_extent/2., z=mound_height/2.))
+    wall3 = create_box(mound_height, base_extent + mound_height, mound_height, color=GREY)
+    set_point(wall3, Point(x=base_extent/2., z=mound_height/2.))
+    wall4 = create_box(mound_height, base_extent + mound_height, mound_height, color=GREY)
+    set_point(wall4, Point(x=-base_extent/2., z=mound_height/2.))
+
+    obstacles = [wall1, wall2, wall3, wall4]
+
+    body_types = []
+    initial_surfaces = OrderedDict()
+    
+    robot_width = BOT_RADIUS*robot_scale
+    offset = robot_width + mound_height
+    
+    
+    box_width = (base_extent/2.0-(mound_height+2*robot_width))*2-dd
+    body = create_box(box_width, box_width, mound_height*4, color=GREY)
+    initial_surfaces[body] = floor
+
+    obstacles.append(body)
+    
+    rover = load_model(TURTLEBOT_URDF, scale=robot_scale)
+    
+    base_joints = get_base_joints(rover)
+    init_conf = Conf(rover, base_joints[:2], (base_extent/2.0-offset, -base_extent/2.0+offset))
+    goal_conf =  Conf(rover, base_joints[:2], (-base_extent/2.0+offset, base_extent/2.0-offset))
+    robot_z = stable_z(rover, floor)
+    set_point(rover, Point(z=robot_z))
+    init_conf.assign()
+
+    return RoversProblem(rover, limits=base_limits, body_types=body_types, init_conf=init_conf, goal_conf=goal_conf, obstacles=obstacles)
+
+def hallway(robot_scale=0.2, dd=0.1):
+    base_extent = 3.0
+    base_limits = (-base_extent/2.*np.ones(2), base_extent/2.*np.ones(2))
+    mound_height = 0.1
+
+
+
+    room_length = 1  # The length of each side of the square rooms
+    hallway_width = 0.5  # The width of the hallway
+    hallway_length = 3  # The length of the hallway
+    wall_thickness = mound_height  # The thickness of the walls
+    wall_height = mound_height  # The height of the walls
+
+    # Walls for Room 1
+    room1_front_wall = create_box(room_length+mound_height, wall_thickness, wall_height, color=GREY)
+    set_point(room1_front_wall, Point(x=-hallway_length/2 - room_length/2, y=0, z=wall_height/2))
+
+    room1_back_wall = create_box(room_length+mound_height, wall_thickness, wall_height, color=GREY)
+    set_point(room1_back_wall, Point(x=-hallway_length/2 - room_length/2, y=room_length, z=wall_height/2))
+
+    room1_left_wall = create_box(wall_thickness, room_length+mound_height, wall_height, color=GREY)
+    set_point(room1_left_wall, Point(x=-hallway_length/2 - room_length - wall_thickness/2, y=room_length/2, z=wall_height/2))
+
+    room1_right_wall = create_box(wall_thickness, room_length+mound_height, wall_height, color=GREY)
+    set_point(room1_right_wall, Point(x=-hallway_length/2, y=room_length/2, z=wall_height/2))
+
+    # Walls for Room 2 (mirroring Room 1 with respect to the origin)
+    room2_front_wall = create_box(room_length+mound_height, wall_thickness, wall_height, color=GREY)
+    set_point(room2_front_wall, Point(x=hallway_length/2 + room_length/2, y=room_length, z=wall_height/2))
+
+    room2_back_wall = create_box(room_length+mound_height, wall_thickness, wall_height, color=GREY)
+    set_point(room2_back_wall, Point(x=hallway_length/2 + room_length/2, y=0, z=wall_height/2))
+
+    room2_left_wall = create_box(wall_thickness, room_length+mound_height, wall_height, color=GREY)
+    set_point(room2_left_wall, Point(x=hallway_length/2, y=room_length/2, z=wall_height/2))
+
+    room2_right_wall = create_box(wall_thickness, room_length+mound_height, wall_height, color=GREY)
+    set_point(room2_right_wall, Point(x=hallway_length/2 + room_length + wall_thickness/2, y=room_length/2, z=wall_height/2))
+
+    # Hallway Walls
+    hallway_top_wall = create_box(hallway_length, wall_thickness, wall_height, color=GREY)
+    set_point(hallway_top_wall, Point(y=room_length/2.0+hallway_width/2, z=wall_height/2))
+
+    hallway_bottom_wall = create_box(hallway_length, wall_thickness, wall_height, color=GREY)
+    set_point(hallway_bottom_wall, Point(y=room_length/2.0-hallway_width/2, z=wall_height/2))
+
+
+    obstacles = [
+        room1_front_wall, room1_back_wall, room1_left_wall, room1_right_wall,
+        room2_front_wall, room2_back_wall, room2_left_wall, room2_right_wall,
+        hallway_top_wall, hallway_bottom_wall
+    ]
+
+    # Room 1 Floor
+    room1_floor = create_box(room_length, room_length, 0.001, color=TAN)
+    set_point(room1_floor, Point(x=-hallway_length/2 - room_length/2, y=room_length/2, z=-0.001/2))
+
+    # Hallway Floor
+    hallway_floor = create_box(hallway_length, hallway_width, 0.001, color=TAN)
+    set_point(hallway_floor, Point(x=0, y=room_length/2.0, z=-0.001/2))
+
+    # Room 2 Floor
+    room2_floor = create_box(room_length, room_length, 0.001, color=TAN)
+    set_point(room2_floor, Point(x=hallway_length/2 + room_length/2, y=room_length/2, z=-0.001/2))
+
+    # Collecting the floors in a list for further operations if needed
+    floors = [room1_floor, hallway_floor, room2_floor]
+
+    body_types = []    
+    robot_width = BOT_RADIUS*robot_scale
+    offset = robot_width + mound_height
+    rover = load_model(TURTLEBOT_URDF, scale=robot_scale)
+    
+    base_joints = get_base_joints(rover)
+    init_conf = Conf(rover, base_joints[:2], (base_extent/2.0-offset, -base_extent/2.0+offset))
+    goal_conf =  Conf(rover, base_joints[:2], (-base_extent/2.0+offset, base_extent/2.0-offset))
+    robot_z = stable_z(rover, room1_floor)
+    set_point(rover, Point(z=robot_z))
+    init_conf.assign()
+
+    wait_if_gui()
+    return RoversProblem(rover, limits=base_limits, body_types=body_types, init_conf=init_conf, goal_conf=goal_conf, obstacles=obstacles)
+
+
+def corner(robot_scale=0.2, dd=0.1):
     base_extent = 3.0
     base_limits = (-base_extent/2.*np.ones(2), base_extent/2.*np.ones(2))
     mound_height = 0.1
