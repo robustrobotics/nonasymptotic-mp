@@ -103,13 +103,11 @@ def hallway(robot_scale=0.2, dd=0.1):
     base_limits = (-base_extent/2.*np.ones(2), base_extent/2.*np.ones(2))
     mound_height = 0.1
 
-
-
     room_length = 1  # The length of each side of the square rooms
-    hallway_width = 0.5  # The width of the hallway
     hallway_length = 3  # The length of the hallway
     wall_thickness = mound_height  # The thickness of the walls
     wall_height = mound_height  # The height of the walls
+    hallway_width = robot_scale * BOT_RADIUS * 2 + wall_thickness + dd  # The width of the hallway
 
     # Walls for Room 1
     room1_front_wall = create_box(room_length+mound_height, wall_thickness, wall_height, color=GREY)
@@ -121,8 +119,15 @@ def hallway(robot_scale=0.2, dd=0.1):
     room1_left_wall = create_box(wall_thickness, room_length+mound_height, wall_height, color=GREY)
     set_point(room1_left_wall, Point(x=-hallway_length/2 - room_length - wall_thickness/2, y=room_length/2, z=wall_height/2))
 
-    room1_right_wall = create_box(wall_thickness, room_length+mound_height, wall_height, color=GREY)
-    set_point(room1_right_wall, Point(x=-hallway_length/2, y=room_length/2, z=wall_height/2))
+    flap_width = (room_length - hallway_width) / 2
+
+    # Room 1 Right Wall Upper Flap
+    room1_flap1 = create_box(wall_thickness, flap_width+mound_height, wall_height, color=GREY)
+    set_point(room1_flap1, Point(x=-hallway_length/2, y=room_length/2 + hallway_width/2 + flap_width/2, z=wall_height/2))
+
+    # Room 1 Right Wall Lower Flap
+    room1_flap2 = create_box(wall_thickness, flap_width+mound_height, wall_height, color=GREY)
+    set_point(room1_flap2, Point(x=-hallway_length/2, y=room_length/2 - hallway_width/2 - flap_width/2, z=wall_height/2))
 
     # Walls for Room 2 (mirroring Room 1 with respect to the origin)
     room2_front_wall = create_box(room_length+mound_height, wall_thickness, wall_height, color=GREY)
@@ -131,8 +136,14 @@ def hallway(robot_scale=0.2, dd=0.1):
     room2_back_wall = create_box(room_length+mound_height, wall_thickness, wall_height, color=GREY)
     set_point(room2_back_wall, Point(x=hallway_length/2 + room_length/2, y=0, z=wall_height/2))
 
-    room2_left_wall = create_box(wall_thickness, room_length+mound_height, wall_height, color=GREY)
-    set_point(room2_left_wall, Point(x=hallway_length/2, y=room_length/2, z=wall_height/2))
+    # Flap 1 (Left side of the opening)
+    room2_flap1 = create_box(wall_thickness, flap_width+mound_height, wall_height, color=GREY)
+    set_point(room2_flap1, Point(x=hallway_length/2, y=flap_width/2, z=wall_height/2))
+
+    # Flap 2 (Right side of the opening)
+    room2_flap2 = create_box(wall_thickness, flap_width+mound_height, wall_height, color=GREY)
+    set_point(room2_flap2, Point(x=hallway_length/2, y=room_length - flap_width/2, z=wall_height/2))
+
 
     room2_right_wall = create_box(wall_thickness, room_length+mound_height, wall_height, color=GREY)
     set_point(room2_right_wall, Point(x=hallway_length/2 + room_length + wall_thickness/2, y=room_length/2, z=wall_height/2))
@@ -146,8 +157,8 @@ def hallway(robot_scale=0.2, dd=0.1):
 
 
     obstacles = [
-        room1_front_wall, room1_back_wall, room1_left_wall, room1_right_wall,
-        room2_front_wall, room2_back_wall, room2_left_wall, room2_right_wall,
+        room1_front_wall, room1_back_wall, room1_left_wall, room1_flap1, room2_flap1,
+        room2_front_wall, room2_back_wall, room2_right_wall, room1_flap2, room2_flap2, #
         hallway_top_wall, hallway_bottom_wall
     ]
 
@@ -166,14 +177,15 @@ def hallway(robot_scale=0.2, dd=0.1):
     # Collecting the floors in a list for further operations if needed
     floors = [room1_floor, hallway_floor, room2_floor]
 
-    body_types = []    
-    robot_width = BOT_RADIUS*robot_scale
-    offset = robot_width + mound_height
+    body_types = []       
     rover = load_model(TURTLEBOT_URDF, scale=robot_scale)
     
     base_joints = get_base_joints(rover)
-    init_conf = Conf(rover, base_joints[:2], (base_extent/2.0-offset, -base_extent/2.0+offset))
-    goal_conf =  Conf(rover, base_joints[:2], (-base_extent/2.0+offset, base_extent/2.0-offset))
+
+    
+
+    init_conf = Conf(rover, base_joints[:2], (-hallway_length/2 - room_length/2, room_length/2))
+    goal_conf =  Conf(rover, base_joints[:2], (hallway_length/2 + room_length/2, room_length/2))
     robot_z = stable_z(rover, room1_floor)
     set_point(rover, Point(z=robot_z))
     init_conf.assign()

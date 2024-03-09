@@ -10,7 +10,7 @@ from pddlstream.language.generator import from_fn
 from pddlstream.utils import read, INF, get_file_path
 from pybullet_tools.pr2_primitives import control_commands, apply_commands, State
 from pybullet_tools.utils import connect, disconnect, has_gui, LockRenderer, WorldSaver, wait_if_gui, joint_from_name
-from streams import get_nonasy_motion_fn
+from streams import get_nonasy_motion_fn, get_anytime_motion_fn
 from nonasymptotic.util import compute_numerical_bound
 from problems import hallway, BOT_RADIUS
 import random
@@ -89,7 +89,7 @@ def pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=N
         custom_limits.update(get_custom_limits(problem.rover, problem.limits))
 
     stream_map = {
-        'sample-motion': from_fn(get_nonasy_motion_fn(problem, custom_limits=custom_limits,
+        'sample-motion': from_fn(get_anytime_motion_fn(problem, custom_limits=custom_limits,
                                                collisions=collisions, algorithm=mp_alg, 
                                                num_samples=max_samples,
                                                connect_radius=connect_radius,
@@ -120,16 +120,20 @@ def main():
     parser.add_argument('-deterministic', action='store_true', help='Uses a deterministic sampler')
     parser.add_argument('-optimal', action='store_true', help='Runs in an anytime mode')
     parser.add_argument('-t', '--max-time', default=240, type=int, help='The max time')
-    parser.add_argument('-ms', '--max-samples', default=2000, type=int, help='Max num samples for motion planning')
+    parser.add_argument('-ms', '--max-samples', default=30000, type=int, help='Max num samples for motion planning')
+    parser.add_argument('-d', '--delta', default=0.2, type=int, help='Max num samples for motion planning')
     parser.add_argument('-mp_alg', '--mp-alg', default="prm", type=str, help='Algorithm to use for motion planning')
     parser.add_argument('-seed', '--seed', default=-1, type=int, help='Seed for selection of robot size and collision placement')
     parser.add_argument('-sd', '--save-dir', default="./logs/debug", type=str, help='Directory to save planning results')
     parser.add_argument('-enable', action='store_true', help='Enables rendering during planning')
+    parser.add_argument('--vis', action='store_true', help='GUI during planning')
     parser.add_argument('-teleport', action='store_true', help='Teleports between configurations')
+    parser.add_argument('--randomize-delta', action='store_true', help='Teleports between configurations')
     parser.add_argument('--adaptive-n', action='store_true', help='Teleports between configurations')
     parser.add_argument('-simulate', action='store_true', help='Simulates the system')
     args = parser.parse_args()
-    connect(use_gui=True)
+
+    connect(use_gui=args.vis)
     
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
@@ -143,15 +147,21 @@ def main():
         np.random.seed(args.seed)
     
     robot_scale = 0.5
-    rovers_problem = hallway(robot_scale=robot_scale)
+    if(args.randomize_delta):
+        delta = args.delta
+    else:
+        delta = random.uniform(0.01, 0.2)
+
+    rovers_problem = hallway(robot_scale=robot_scale, dd=delta)
 
     max_samples = args.max_samples
-    delta = BOT_RADIUS*robot_scale/2.0
     connect_radius = 0.1
+    
     if(args.adaptive_n):
         max_samples, connect_radius = compute_numerical_bound(delta, 0.9, 4, 2, None)
     
-    print("Delta: "+str(delta))
+    print("Delta: ")
+    print(delta)
     print("Max samples: "+str(max_samples))
     print("Connection radius: "+str(connect_radius))
     
