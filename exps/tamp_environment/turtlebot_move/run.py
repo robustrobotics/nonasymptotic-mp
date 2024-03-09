@@ -149,9 +149,9 @@ def main():
     
     robot_scale = 0.5
     if(args.randomize_delta):
-        delta = args.delta
-    else:
         delta = random.uniform(0.01, 0.2)
+    else:
+        delta = args.delta
 
     rovers_problem = hallway(robot_scale=robot_scale, dd=delta)
 
