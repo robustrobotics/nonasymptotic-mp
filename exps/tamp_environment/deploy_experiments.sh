@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task 8
+#SBATCH --cpus-per-task 2
 #SBATCH --time=12:00:00
 
 i=1
@@ -11,7 +11,7 @@ do
     do
         if [ $((i)) -eq  $((SLURM_ARRAY_TASK_ID + 0)) ]; then
             save_path="/home/gridsan/acurtis/runs/$algorithm-$seed-$n-$current_time"
-            python run.py --seed=$seed --save-dir="$save_path" --randomize-delta
+            python ./turtlebot_move/run.py --seed=$seed --save-dir="$save_path" --randomize-delta
         fi
         i=$((i+1))
     done

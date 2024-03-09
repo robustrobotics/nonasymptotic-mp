@@ -186,7 +186,8 @@ def main():
                                 unit_costs=args.unit, success_cost=success_cost,
                                 max_time=args.max_time, verbose=True,
                                 unit_efforts=True, effort_weight=1,
-                                search_sample_ratio=search_sample_ratio)
+                                search_sample_ratio=search_sample_ratio, 
+                                temp_dir=os.path.join(args.save_dir, "pddl"))
     
     print_solution(solution)
     print("Time: "+str(time.time()-st))
