@@ -10,7 +10,7 @@ from pddlstream.language.generator import from_fn
 from pddlstream.utils import read, INF, get_file_path
 from pybullet_tools.pr2_primitives import control_commands, apply_commands, State
 from pybullet_tools.utils import connect, disconnect, has_gui, LockRenderer, WorldSaver, wait_if_gui, joint_from_name
-from streams import get_nonasy_motion_fn, get_anytime_motion_fn
+from streams import get_anytime_motion_fn
 from nonasymptotic.util import compute_numerical_bound
 from problems import hallway, BOT_RADIUS
 import random
@@ -91,7 +91,10 @@ def pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=N
     stream_map = {
         'sample-motion': from_fn(get_anytime_motion_fn(problem, custom_limits=custom_limits,
                                                collisions=collisions, algorithm=mp_alg, 
-                                               num_samples=max_samples,
+                                            #    start_samples=10, # Used for nsamples testing 
+                                               start_samples=100, 
+                                               end_samples=max_samples,
+                                               factor=1.5,
                                                connect_radius=connect_radius,
                                                **kwargs)),
     }
@@ -115,13 +118,14 @@ def post_process(problem, plan):
     return commands
 
 def main():
+    # Unoptimized code: 300 takes 1:15
     parser = create_parser()
     parser.add_argument('-cfree', action='store_true', help='Disables collisions')
     parser.add_argument('-deterministic', action='store_true', help='Uses a deterministic sampler')
     parser.add_argument('-optimal', action='store_true', help='Runs in an anytime mode')
     parser.add_argument('-t', '--max-time', default=240, type=int, help='The max time')
     parser.add_argument('-ms', '--max-samples', default=30000, type=int, help='Max num samples for motion planning')
-    parser.add_argument('-d', '--delta', default=0.2, type=int, help='Max num samples for motion planning')
+    parser.add_argument('-d', '--delta', default=0.2, type=float, help='Max num samples for motion planning')
     parser.add_argument('-mp_alg', '--mp-alg', default="prm", type=str, help='Algorithm to use for motion planning')
     parser.add_argument('-seed', '--seed', default=-1, type=int, help='Seed for selection of robot size and collision placement')
     parser.add_argument('-sd', '--save-dir', default="./logs/debug", type=str, help='Directory to save planning results')

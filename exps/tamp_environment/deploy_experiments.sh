@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task 2
-#SBATCH --time=12:00:00
+#SBATCH --cpus-per-task 4
+#SBATCH --time=24:00:00
 
 i=1
 current_time=$(date +"%Y%m%d-%H%M%S")  # Getting the current time in YYYYMMDD-HHMMSS format
