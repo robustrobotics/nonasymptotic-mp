@@ -34,6 +34,8 @@ for delta in space:
     n, _ = compute_numerical_bound(delta, 0.9, 1, 2, None)
     bounds.append(n)
 plt.plot(space, bounds)
-
-# plt.scatter(*zip(*[(numbers[k], v) for k, v in samples.items()]))
+plt.scatter(*zip(*[(numbers[k], v) for k, v in samples.items()]))
+plt.xlabel("Delta")
+plt.ylabel("Num required samples")
+plt.title("Pybullet navigation")
 plt.show()

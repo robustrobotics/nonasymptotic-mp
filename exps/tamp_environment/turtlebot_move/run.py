@@ -12,7 +12,7 @@ from pybullet_tools.pr2_primitives import control_commands, apply_commands, Stat
 from pybullet_tools.utils import connect, disconnect, has_gui, LockRenderer, WorldSaver, wait_if_gui, joint_from_name
 from streams import get_anytime_motion_fn
 from nonasymptotic.util import compute_numerical_bound
-from problems import hallway, BOT_RADIUS
+from problems import hallway, BOT_RADIUS, hallway_manip
 import random
 import time
 import numpy as np
@@ -66,6 +66,41 @@ def get_custom_limits(robot, base_limits, yaw_limit=None):
             joint_from_name(robot, 'theta'): yaw_limit,
         })
     return custom_limits
+
+
+def pick_place_pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=None, connect_radius=None, **kwargs):
+    # TODO: push and attach to movable objects
+
+    domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
+    stream_pddl = read(get_file_path(__file__, 'stream.pddl'))
+    constant_map = {}
+
+    init = []
+    goal_literals = []
+    
+    q0 = problem.init_conf
+    goal_conf = problem.goal_conf
+    
+    init += [('Rover', problem.rover), ('Conf', problem.rover, q0), ('AtConf', problem.rover, q0), ("Conf", problem.rover, goal_conf)]
+    goal_literals += [('Holding', problem.targets[0])]
+    goal_formula = And(*goal_literals)
+
+    custom_limits = {}
+    if problem.limits is not None:
+        custom_limits.update(get_custom_limits(problem.rover, problem.limits))
+
+    stream_map = {
+        'sample-motion': from_fn(get_anytime_motion_fn(problem, custom_limits=custom_limits,
+                                               collisions=collisions, algorithm=mp_alg, 
+                                            #    start_samples=10, # Used for nsamples testing 
+                                               start_samples=100, 
+                                               end_samples=max_samples,
+                                               factor=1.5,
+                                               connect_radius=connect_radius,
+                                               **kwargs)),
+    }
+
+    return PDDLProblem(domain_pddl, constant_map, stream_pddl, stream_map, init, goal_formula)
 
 def pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=None, connect_radius=None, **kwargs):
     # TODO: push and attach to movable objects
@@ -124,8 +159,8 @@ def main():
     parser.add_argument('-deterministic', action='store_true', help='Uses a deterministic sampler')
     parser.add_argument('-optimal', action='store_true', help='Runs in an anytime mode')
     parser.add_argument('-t', '--max-time', default=240, type=int, help='The max time')
-    parser.add_argument('-ms', '--max-samples', default=30000, type=int, help='Max num samples for motion planning')
-    parser.add_argument('-d', '--delta', default=0.2, type=float, help='Max num samples for motion planning')
+    parser.add_argument('-ms', '--max-samples', default=300, type=int, help='Max num samples for motion planning')
+    parser.add_argument('-d', '--delta', default=0.3, type=float, help='Max num samples for motion planning')
     parser.add_argument('-mp_alg', '--mp-alg', default="prm", type=str, help='Algorithm to use for motion planning')
     parser.add_argument('-seed', '--seed', default=-1, type=int, help='Seed for selection of robot size and collision placement')
     parser.add_argument('-sd', '--save-dir', default="./logs/debug", type=str, help='Directory to save planning results')
@@ -157,7 +192,7 @@ def main():
     else:
         delta = args.delta
 
-    rovers_problem = hallway(robot_scale=robot_scale, dd=delta)
+    rovers_problem = hallway_manip(robot_scale=robot_scale, dd=delta, num_target=1)
 
     max_samples = args.max_samples
     connect_radius = 0.1
