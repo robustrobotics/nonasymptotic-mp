@@ -4,12 +4,13 @@ from collections import OrderedDict
 from pybullet_tools.utils import set_point, Point, create_box, \
     stable_z, load_model, TURTLEBOT_URDF, joints_from_names, \
     set_joint_positions, get_joint_positions, remove_body, \
-    GREY, TAN, YELLOW, get_bodies, pairwise_collision, sample_placement, wait_if_gui
+    GREY, TAN, YELLOW, get_bodies, pairwise_collision, sample_placement, \
+    wait_if_gui, get_pose, euler_from_quat
 from pybullet_tools.pr2_primitives import Conf
-import random
+from typing import List, Tuple
+from dataclasses import dataclass, field
 
 BOT_RADIUS = 0.179
-
 
 def sample_placements(body_surfaces, obstacles=None, min_distances={}):
     if obstacles is None:
@@ -44,16 +45,16 @@ KINECT_FRAME = 'camera_rgb_optical_frame' # eyes
 
 #######################################################
 
-class RoversProblem(object):
-    def __init__(self, rover=None, obstacles=[], limits=[], body_types=[], targets=[], init_conf=None, goal_conf=None):
-        self.rover = rover
-        self.targets = targets
-        self.init_conf = init_conf
-        self.goal_conf = goal_conf
-        self.limits = limits
-        self.obstacles=obstacles
-        self.body_types = body_types
-        self.costs = False
+@dataclass
+class RoversProblem():
+    rover:int = None
+    obstacles:List[int] = field(default_factory=lambda: [])
+    limits:List[Tuple[float]] = field(default_factory=lambda: [])
+    targets:List[int] = field(default_factory=lambda: []) 
+    target_init_confs:List[Conf] = field(default_factory=lambda: []) 
+    target_goal_confs:List[Conf] = field(default_factory=lambda: []) 
+    init_conf:Conf = None
+    goal_conf:Conf = None
 
 #######################################################
 def hallway(robot_scale=0.2, dd=0.1):
@@ -75,7 +76,6 @@ def hallway(robot_scale=0.2, dd=0.1):
 
     obstacles = [wall1, wall2, wall3, wall4]
 
-    body_types = []
     initial_surfaces = OrderedDict()
     
     robot_width = BOT_RADIUS*robot_scale
@@ -97,7 +97,7 @@ def hallway(robot_scale=0.2, dd=0.1):
     set_point(rover, Point(z=robot_z))
     init_conf.assign()
 
-    return RoversProblem(rover, limits=base_limits, body_types=body_types, init_conf=init_conf, goal_conf=goal_conf, obstacles=obstacles)
+    return RoversProblem(rover, limits=base_limits,init_conf=init_conf, goal_conf=goal_conf, obstacles=obstacles)
 
 
 def hallway_manip(robot_scale=0.2, dd=0.1, num_target=1):
@@ -179,29 +179,48 @@ def hallway_manip(robot_scale=0.2, dd=0.1, num_target=1):
     # Collecting the floors in a list for further operations if needed
     floors = [room1_floor, hallway_floor, room2_floor]
 
-    body_types = []       
     rover = load_model(TURTLEBOT_URDF, scale=robot_scale)
     
     base_joints = get_base_joints(rover)
 
     targets = []
-    body_surfaces = {}
+
     for _ in range(num_target):
         box_size = 0.2
         target = create_box(box_size, box_size, box_size, color=YELLOW)
-        body_surfaces[target] = room2_floor
+        targets.append(target)
 
+
+    body_surfaces = {target: room1_floor for target in targets}
     sample_placements(body_surfaces, obstacles=obstacles)
+    target_goal_confs = []
+    for target in targets:
+        target_pose = get_pose(target)
+        target_euler = euler_from_quat(target_pose[1])
+        target_goal_confs.append(Conf(rover, base_joints[:3], (target_pose[0][0], target_pose[0][1], target_euler[2])))
+        
+    body_surfaces = {target: room2_floor for target in targets}
+    sample_placements(body_surfaces, obstacles=obstacles)
+    target_init_confs = []
+    for target in targets:
+        target_pose = get_pose(target)
+        target_euler = euler_from_quat(target_pose[1])
+        target_init_confs.append(Conf(rover, base_joints[:3], (target_pose[0][0], target_pose[0][1], target_euler[2])))
 
-    init_conf = Conf(rover, base_joints[:2], (-hallway_length/2 - room_length/2, room_length/2))
+    body_surfaces = {}
+    init_conf = Conf(rover, base_joints[:3], (-hallway_length/2 - room_length/2, room_length/2, 0))
     # goal_conf =  Conf(rover, base_joints[:2], (hallway_length/2 + room_length/2, room_length/2))
     robot_z = stable_z(rover, room1_floor)
     set_point(rover, Point(z=robot_z))
     init_conf.assign()
 
     wait_if_gui()
-    return RoversProblem(rover, limits=base_limits, body_types=body_types, init_conf=init_conf, obstacles=obstacles, targets=targets)
-
+    return RoversProblem(rover, limits=base_limits, 
+                         init_conf=init_conf, 
+                         obstacles=obstacles, 
+                         targets=targets, 
+                         target_init_confs=target_init_confs,
+                         target_goal_confs=target_goal_confs)
 
 def hallway(robot_scale=0.2, dd=0.1):
     base_extent = 3.0
@@ -281,14 +300,12 @@ def hallway(robot_scale=0.2, dd=0.1):
 
     # Collecting the floors in a list for further operations if needed
     floors = [room1_floor, hallway_floor, room2_floor]
-
-    body_types = []       
+  
     rover = load_model(TURTLEBOT_URDF, scale=robot_scale)
     
     base_joints = get_base_joints(rover)
 
     
-
     init_conf = Conf(rover, base_joints[:2], (-hallway_length/2 - room_length/2, room_length/2))
     goal_conf =  Conf(rover, base_joints[:2], (hallway_length/2 + room_length/2, room_length/2))
     robot_z = stable_z(rover, room1_floor)
@@ -296,7 +313,7 @@ def hallway(robot_scale=0.2, dd=0.1):
     init_conf.assign()
 
     wait_if_gui()
-    return RoversProblem(rover, limits=base_limits, body_types=body_types, init_conf=init_conf, goal_conf=goal_conf, obstacles=obstacles)
+    return RoversProblem(rover, limits=base_limits, init_conf=init_conf, goal_conf=goal_conf, obstacles=obstacles)
 
 
 def corner(robot_scale=0.2, dd=0.1):
@@ -318,7 +335,6 @@ def corner(robot_scale=0.2, dd=0.1):
 
     obstacles = [wall1, wall2, wall3, wall4]
 
-    body_types = []
     initial_surfaces = OrderedDict()
     
     robot_width = BOT_RADIUS*robot_scale
@@ -340,7 +356,7 @@ def corner(robot_scale=0.2, dd=0.1):
     set_point(rover, Point(z=robot_z))
     init_conf.assign()
 
-    return RoversProblem(rover, limits=base_limits, body_types=body_types, init_conf=init_conf, goal_conf=goal_conf, obstacles=obstacles)
+    return RoversProblem(rover, limits=base_limits, init_conf=init_conf, goal_conf=goal_conf, obstacles=obstacles)
 
 
 def random_obstacles(n_obstacles=50, robot_scale=1):
@@ -360,7 +376,6 @@ def random_obstacles(n_obstacles=50, robot_scale=1):
     wall4 = create_box(mound_height, base_extent + mound_height, mound_height, color=GREY)
     set_point(wall4, Point(x=-base_extent/2., z=mound_height/2.))
 
-    body_types = []
     initial_surfaces = OrderedDict()
     for _ in range(n_obstacles):
         body = create_box(mound_height, mound_height, 4*mound_height, color=GREY)
@@ -385,4 +400,4 @@ def random_obstacles(n_obstacles=50, robot_scale=1):
 
     sample_placements(initial_surfaces, obstacles=[rover, rover2])
     remove_body(rover2)
-    return RoversProblem(rover, limits=base_limits, body_types=body_types, init_conf=init_conf, goal_conf=goal_conf)
+    return RoversProblem(rover, limits=base_limits, init_conf=init_conf, goal_conf=goal_conf)

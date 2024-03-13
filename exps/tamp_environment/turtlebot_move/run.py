@@ -8,8 +8,8 @@ from pddlstream.language.constants import And, print_solution, PDDLProblem
 from pddlstream.language.stream import StreamInfo
 from pddlstream.language.generator import from_fn
 from pddlstream.utils import read, INF, get_file_path
-from pybullet_tools.pr2_primitives import control_commands, apply_commands, State
-from pybullet_tools.utils import connect, disconnect, has_gui, LockRenderer, WorldSaver, wait_if_gui, joint_from_name
+from pybullet_tools.pr2_primitives import control_commands, apply_commands, State, Conf
+from pybullet_tools.utils import connect, disconnect, has_gui, LockRenderer, WorldSaver, wait_if_gui, joint_from_name, get_pose
 from streams import get_anytime_motion_fn
 from nonasymptotic.util import compute_numerical_bound
 from problems import hallway, BOT_RADIUS, hallway_manip
@@ -114,9 +114,17 @@ def pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=N
     
     q0 = problem.init_conf
     goal_conf = problem.goal_conf
-    
-    init += [('Rover', problem.rover), ('Conf', problem.rover, q0), ('AtConf', problem.rover, q0), ("Conf", problem.rover, goal_conf)]
-    goal_literals += [('AtConf', problem.rover, goal_conf)]
+    confs = [('Conf', problem.rover, q0), ('AtConf', problem.rover, q0), ("Conf", problem.rover, goal_conf)]
+
+    target_poses = []
+    goal_literals = []
+
+    for target, target_init_conf, target_goal_conf in zip(problem.targets, problem.target_init_confs, problem.target_goal_confs):        
+        target_poses+=[('Conf', target, target_goal_conf), ('Conf', target, target_init_conf), ("AtConf", target, target_init_conf)]
+        goal_literals.append(('AtConf', target, target_goal_conf))
+
+    init += [('Rover', problem.rover)]+confs+target_poses
+    goal_literals += [('AtConf', target, goal_conf)]
     goal_formula = And(*goal_literals)
 
     custom_limits = {}
