@@ -5,7 +5,7 @@ from pybullet_tools.utils import set_point, Point, create_box, \
     stable_z, load_model, TURTLEBOT_URDF, joints_from_names, \
     set_joint_positions, get_joint_positions, remove_body, \
     GREY, TAN, YELLOW, get_bodies, pairwise_collision, sample_placement, \
-    wait_if_gui, get_pose, euler_from_quat
+    wait_if_gui, get_pose, Pose, create_cylinder
 from pybullet_tools.pr2_primitives import Conf
 from typing import List, Tuple
 from dataclasses import dataclass, field
@@ -51,8 +51,8 @@ class RoversProblem():
     obstacles:List[int] = field(default_factory=lambda: [])
     limits:List[Tuple[float]] = field(default_factory=lambda: [])
     targets:List[int] = field(default_factory=lambda: []) 
-    target_init_confs:List[Conf] = field(default_factory=lambda: []) 
-    target_goal_confs:List[Conf] = field(default_factory=lambda: []) 
+    target_init_poses:List[Pose] = field(default_factory=lambda: []) 
+    target_goal_poses:List[Pose] = field(default_factory=lambda: []) 
     init_conf:Conf = None
     goal_conf:Conf = None
 
@@ -186,29 +186,20 @@ def hallway_manip(robot_scale=0.2, dd=0.1, num_target=1):
     targets = []
 
     for _ in range(num_target):
-        box_size = 0.2
-        target = create_box(box_size, box_size, box_size, color=YELLOW)
+        box_size = 0.1
+        target = create_cylinder(box_size, 0.1, color=YELLOW)
         targets.append(target)
-
 
     body_surfaces = {target: room1_floor for target in targets}
     sample_placements(body_surfaces, obstacles=obstacles)
-    target_goal_confs = []
-    for target in targets:
-        target_pose = get_pose(target)
-        target_euler = euler_from_quat(target_pose[1])
-        target_goal_confs.append(Conf(rover, base_joints[:3], (target_pose[0][0], target_pose[0][1], target_euler[2])))
+    target_goal_poses = [get_pose(target) for target in targets]
         
     body_surfaces = {target: room2_floor for target in targets}
     sample_placements(body_surfaces, obstacles=obstacles)
-    target_init_confs = []
-    for target in targets:
-        target_pose = get_pose(target)
-        target_euler = euler_from_quat(target_pose[1])
-        target_init_confs.append(Conf(rover, base_joints[:3], (target_pose[0][0], target_pose[0][1], target_euler[2])))
+    target_init_poses = [get_pose(target) for target in targets]
 
     body_surfaces = {}
-    init_conf = Conf(rover, base_joints[:3], (-hallway_length/2 - room_length/2, room_length/2, 0))
+    init_conf = Conf(rover, base_joints[:2], (-hallway_length/2 - room_length/2, room_length/2))
     # goal_conf =  Conf(rover, base_joints[:2], (hallway_length/2 + room_length/2, room_length/2))
     robot_z = stable_z(rover, room1_floor)
     set_point(rover, Point(z=robot_z))
@@ -219,8 +210,8 @@ def hallway_manip(robot_scale=0.2, dd=0.1, num_target=1):
                          init_conf=init_conf, 
                          obstacles=obstacles, 
                          targets=targets, 
-                         target_init_confs=target_init_confs,
-                         target_goal_confs=target_goal_confs)
+                         target_init_poses=target_init_poses,
+                         target_goal_poses=target_goal_poses)
 
 def hallway(robot_scale=0.2, dd=0.1):
     base_extent = 3.0

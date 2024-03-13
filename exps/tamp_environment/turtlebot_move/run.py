@@ -8,9 +8,9 @@ from pddlstream.language.constants import And, print_solution, PDDLProblem
 from pddlstream.language.stream import StreamInfo
 from pddlstream.language.generator import from_fn
 from pddlstream.utils import read, INF, get_file_path
-from pybullet_tools.pr2_primitives import control_commands, apply_commands, State, Conf
+from pybullet_tools.pr2_primitives import control_commands, apply_commands, State
 from pybullet_tools.utils import connect, disconnect, has_gui, LockRenderer, WorldSaver, wait_if_gui, joint_from_name, get_pose
-from streams import get_anytime_motion_fn
+from streams import get_anytime_motion_fn, get_ik
 from nonasymptotic.util import compute_numerical_bound
 from problems import hallway, BOT_RADIUS, hallway_manip
 import random
@@ -18,6 +18,7 @@ import time
 import numpy as np
 import logging
 import os
+import copy
 
 
 class StreamToLogger:
@@ -67,40 +68,40 @@ def get_custom_limits(robot, base_limits, yaw_limit=None):
         })
     return custom_limits
 
+# Without pick place
+# def pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=None, connect_radius=None, **kwargs):
+#     # TODO: push and attach to movable objects
 
-def pick_place_pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=None, connect_radius=None, **kwargs):
-    # TODO: push and attach to movable objects
+#     domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
+#     stream_pddl = read(get_file_path(__file__, 'stream.pddl'))
+#     constant_map = {}
 
-    domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
-    stream_pddl = read(get_file_path(__file__, 'stream.pddl'))
-    constant_map = {}
-
-    init = []
-    goal_literals = []
+#     init = []
+#     goal_literals = []
     
-    q0 = problem.init_conf
-    goal_conf = problem.goal_conf
+#     q0 = problem.init_conf
+#     goal_conf = problem.goal_conf
     
-    init += [('Rover', problem.rover), ('Conf', problem.rover, q0), ('AtConf', problem.rover, q0), ("Conf", problem.rover, goal_conf)]
-    goal_literals += [('Holding', problem.targets[0])]
-    goal_formula = And(*goal_literals)
+#     init += [('Rover', problem.rover), ('Conf', problem.rover, q0), ('AtConf', problem.rover, q0), ("Conf", problem.rover, goal_conf)]
+#     goal_literals += [('Holding', problem.targets[0])]
+#     goal_formula = And(*goal_literals)
 
-    custom_limits = {}
-    if problem.limits is not None:
-        custom_limits.update(get_custom_limits(problem.rover, problem.limits))
+#     custom_limits = {}
+#     if problem.limits is not None:
+#         custom_limits.update(get_custom_limits(problem.rover, problem.limits))
 
-    stream_map = {
-        'sample-motion': from_fn(get_anytime_motion_fn(problem, custom_limits=custom_limits,
-                                               collisions=collisions, algorithm=mp_alg, 
-                                            #    start_samples=10, # Used for nsamples testing 
-                                               start_samples=100, 
-                                               end_samples=max_samples,
-                                               factor=1.5,
-                                               connect_radius=connect_radius,
-                                               **kwargs)),
-    }
+#     stream_map = {
+#         'sample-motion': from_fn(get_anytime_motion_fn(problem, custom_limits=custom_limits,
+#                                                collisions=collisions, algorithm=mp_alg, 
+#                                                start_samples=100, 
+#                                                end_samples=max_samples,
+#                                                factor=1.5,
+#                                                connect_radius=connect_radius,
+#                                                **kwargs)),
+#     }
 
-    return PDDLProblem(domain_pddl, constant_map, stream_pddl, stream_map, init, goal_formula)
+#     return PDDLProblem(domain_pddl, constant_map, stream_pddl, stream_map, init, goal_formula)
+
 
 def pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=None, connect_radius=None, **kwargs):
     # TODO: push and attach to movable objects
@@ -109,22 +110,23 @@ def pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=N
     stream_pddl = read(get_file_path(__file__, 'stream.pddl'))
     constant_map = {}
 
-    init = []
+    init = [('HFree',)]
     goal_literals = []
     
     q0 = problem.init_conf
     goal_conf = problem.goal_conf
-    confs = [('Conf', problem.rover, q0), ('AtConf', problem.rover, q0), ("Conf", problem.rover, goal_conf)]
+    confs = [('Conf', problem.rover, q0), ('AtConf', problem.rover, q0)]
 
     target_poses = []
     goal_literals = []
 
-    for target, target_init_conf, target_goal_conf in zip(problem.targets, problem.target_init_confs, problem.target_goal_confs):        
-        target_poses+=[('Conf', target, target_goal_conf), ('Conf', target, target_init_conf), ("AtConf", target, target_init_conf)]
-        goal_literals.append(('AtConf', target, target_goal_conf))
+    for target, target_init_pose, target_goal_pose in zip(problem.targets, problem.target_init_poses, problem.target_goal_poses):        
+        target_poses+=[('Target', target), ('Pose', target, target_goal_pose), ('Pose', target, target_init_pose), ("AtPose", target, target_init_pose)]
+        goal_literals.append(('AtPose', target, target_goal_pose))
 
     init += [('Rover', problem.rover)]+confs+target_poses
-    goal_literals += [('AtConf', target, goal_conf)]
+
+    goal_literals = [('Holding', problem.targets[0])]
     goal_formula = And(*goal_literals)
 
     custom_limits = {}
@@ -134,14 +136,17 @@ def pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=N
     stream_map = {
         'sample-motion': from_fn(get_anytime_motion_fn(problem, custom_limits=custom_limits,
                                                collisions=collisions, algorithm=mp_alg, 
-                                            #    start_samples=10, # Used for nsamples testing 
                                                start_samples=100, 
                                                end_samples=max_samples,
                                                factor=1.5,
                                                connect_radius=connect_radius,
                                                **kwargs)),
+        'sample-ik': from_fn(get_ik(problem)),
+
     }
 
+    print("Init: "+str(init))
+    print("Goal: "+str(goal_formula))
     return PDDLProblem(domain_pddl, constant_map, stream_pddl, stream_map, init, goal_formula)
 
 
@@ -151,8 +156,11 @@ def post_process(problem, plan):
     commands = []
     attachments = {}
     for i, (name, args) in enumerate(plan):
-        if name == 'move':
-            v, q1, t, q2 = args
+        if name == 'pick':
+            v, q, t, p, o = args
+            new_commands = [t]
+        elif name == 'place':
+            v, q, t, p, o = args
             new_commands = [t]
         else:
             raise ValueError(name)
@@ -220,6 +228,7 @@ def main():
     print(pddlstream_problem)
     stream_info = {
         'sample-motion': StreamInfo(overhead=10),
+        'sample-ik': StreamInfo(overhead=10),
     }
     search_sample_ratio = 2
     max_planner_time = 10
