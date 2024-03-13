@@ -1,18 +1,16 @@
 from __future__ import print_function
 
 import numpy as np
-from pybullet_tools.pr2_primitives import Conf, Trajectory, create_trajectory, Attach, Detach 
-from pybullet_tools.utils import get_point, get_custom_limits, all_between, pairwise_collision, \
-    plan_joint_motion, joints_from_names, set_pose, get_oobb,\
-    remove_body, get_visual_data, get_pose, get_aabb_extent, aabb_from_extent_center,\
-    wait_for_duration, create_body, visual_shape_from_data, LockRenderer, plan_nonholonomic_motion, \
+from pybullet_tools.pr2_primitives import Trajectory, create_trajectory
+from pybullet_tools.utils import plan_joint_motion, joints_from_names, get_oobb,\
+    get_aabb_extent, aabb_from_extent_center,\
+    plan_nonholonomic_motion, \
     child_link_from_joint, Attachment, OOBB, get_oobb_vertices, Pose, AABB, get_aabb
 from separating_axis import vec_separating_axis_theorem
 from pddlstream.language.constants import Output
 from nonasymptotic.envs import Environment
 from nonasymptotic.prm import SimpleNearestNeighborRadiusPRM
 from typing import List
-import matplotlib.pyplot as plt
 from scipy.spatial import ConvexHull
 from tqdm import tqdm
 import itertools
@@ -91,7 +89,7 @@ class BagOfBoundingBoxes(Environment):
         goal_exp  = np.tile(np.expand_dims(goal, axis=1), (1, self.robot_verts.shape[0], 1))
         robot_start_verts = np.tile(np.expand_dims(self.robot_verts, axis=0), (start.shape[0], 1, 1)) + start_exp
         robot_goal_verts = np.tile(np.expand_dims(self.robot_verts, axis=0), (start.shape[0], 1, 1)) + goal_exp
-        num_steps = int(np.max(np.min(np.abs(robot_start_verts-robot_goal_verts), axis=1))/0.15)+2
+        num_steps = int(np.max(np.min(np.abs(robot_start_verts-robot_goal_verts), axis=1))/0.08)+2
         alphas = np.linspace(0, 1, num_steps)
         for obstacle_hull, alpha in tqdm(list(itertools.product(self.obstacle_hulls, alphas))):
                 interm_verts = robot_start_verts + alpha*(robot_goal_verts-robot_start_verts)
@@ -154,7 +152,10 @@ def get_anytime_motion_fn(problem, custom_limits={}, collisions=True, teleport=F
 
         path = np.concatenate([np.expand_dims(start, axis=0), path, np.expand_dims(goal, axis=0)], axis=0).tolist()
         
-        ht = create_trajectory(rover, q2.joints, interpolate_vectors(path, threshold=0.025))
+        if(not teleport):
+            path = interpolate_vectors(path, threshold=0.025)
+            
+        ht = create_trajectory(rover, q2.joints, path)
         return Output(ht)
         
     return test

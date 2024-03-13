@@ -201,7 +201,7 @@ def main():
         random.seed(args.seed)
         np.random.seed(args.seed)
     
-    robot_scale = 0.5
+    robot_scale = 0.3
     if(args.randomize_delta):
         delta = random.uniform(0.01, 0.2)
     else:

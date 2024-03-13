@@ -9,6 +9,7 @@ from pybullet_tools.utils import set_point, Point, create_box, \
     get_moving_links
 from typing import List, Tuple
 from dataclasses import dataclass, field
+import random
 
 BOT_RADIUS = 0.179
 
@@ -70,9 +71,6 @@ def get_base_conf(robot):
 def set_base_conf(robot, conf):
     set_joint_positions(robot, get_base_joints(robot), conf)
 
-KINECT_FRAME = 'camera_rgb_optical_frame' # eyes
-#KINECT_FRAME = 'eyes'
-
 #######################################################
 
 @dataclass
@@ -81,8 +79,9 @@ class RoversProblem():
     obstacles:List[int] = field(default_factory=lambda: [])
     limits:List[Tuple[float]] = field(default_factory=lambda: [])
     targets:List[int] = field(default_factory=lambda: []) 
-    target_init_poses:List[Pose] = field(default_factory=lambda: []) 
-    target_goal_poses:List[Pose] = field(default_factory=lambda: []) 
+    target_init_poses:List[ObjectPose] = field(default_factory=lambda: []) 
+    target_goal_poses:List[ObjectPose] = field(default_factory=lambda: []) 
+    target_sizes:List[float] = field(default_factory=lambda: [])
     init_conf:Conf = None
     goal_conf:Conf = None
 
@@ -135,12 +134,25 @@ def hallway_manip(robot_scale=0.2, dd=0.1, num_target=1):
     base_limits = (-base_extent/2.*np.ones(2), base_extent/2.*np.ones(2))
     mound_height = 0.1
 
-    room_length = 1  # The length of each side of the square rooms
+    room_length = 1.5  # The length of each side of the square rooms
     hallway_length = 3  # The length of the hallway
     wall_thickness = mound_height  # The thickness of the walls
     wall_height = mound_height  # The height of the walls
-    hallway_width = robot_scale * BOT_RADIUS * 2 + wall_thickness + dd  # The width of the hallway
+    
+    targets = []
+    target_sizes = {}
 
+    # Make each obstacle have a size between the robot size and the hallway witdh, 
+    # with one of the objects being only dd smaller than the hallway
+    min_object_size = robot_scale * BOT_RADIUS
+    for _ in range(num_target):
+        target_radius = random.uniform(min_object_size, min_object_size+0.1)
+        target = create_cylinder(target_radius, 0.1, color=YELLOW)
+        target_sizes[target] = target_radius
+        targets.append(target)
+        
+    hallway_width = max(list(target_sizes.values())) + wall_thickness + dd  # The width of the hallway
+        
     # Walls for Room 1
     room1_front_wall = create_box(room_length+mound_height, wall_thickness, wall_height, color=GREY)
     set_point(room1_front_wall, Point(x=-hallway_length/2 - room_length/2, y=0, z=wall_height/2))
@@ -213,12 +225,6 @@ def hallway_manip(robot_scale=0.2, dd=0.1, num_target=1):
     
     base_joints = get_base_joints(rover)
 
-    targets = []
-
-    for _ in range(num_target):
-        box_size = 0.1
-        target = create_cylinder(box_size, 0.1, color=YELLOW)
-        targets.append(target)
 
     body_surfaces = {target: room1_floor for target in targets}
     sample_placements(body_surfaces, obstacles=obstacles)
@@ -241,7 +247,8 @@ def hallway_manip(robot_scale=0.2, dd=0.1, num_target=1):
                          obstacles=obstacles, 
                          targets=targets, 
                          target_init_poses=target_init_poses,
-                         target_goal_poses=target_goal_poses)
+                         target_goal_poses=target_goal_poses,
+                         target_sizes=target_sizes)
 
 def hallway(robot_scale=0.2, dd=0.1):
     base_extent = 3.0
