@@ -10,9 +10,10 @@ from pddlstream.language.generator import from_fn
 from pddlstream.utils import read, INF, get_file_path
 from pybullet_tools.pr2_primitives import control_commands, apply_commands, State
 from pybullet_tools.utils import connect, disconnect, has_gui, LockRenderer, WorldSaver, wait_if_gui, joint_from_name, get_pose
+from pybullet_tools.pr2_primitives import Conf, Trajectory, create_trajectory, Attach, Detach
 from streams import get_anytime_motion_fn, get_ik
 from nonasymptotic.util import compute_numerical_bound
-from problems import hallway, BOT_RADIUS, hallway_manip
+from problems import hallway, BOT_RADIUS, hallway_manip, BASE_LINK
 import random
 import time
 import numpy as np
@@ -126,7 +127,7 @@ def pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=N
 
     init += [('Rover', problem.rover)]+confs+target_poses
 
-    goal_literals = [('Holding', problem.targets[0])]
+    # goal_literals = [('Holding', problem.targets[0])]
     goal_formula = And(*goal_literals)
 
     custom_limits = {}
@@ -142,7 +143,6 @@ def pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=N
                                                connect_radius=connect_radius,
                                                **kwargs)),
         'sample-ik': from_fn(get_ik(problem)),
-
     }
 
     print("Init: "+str(init))
@@ -157,11 +157,12 @@ def post_process(problem, plan):
     attachments = {}
     for i, (name, args) in enumerate(plan):
         if name == 'pick':
-            v, q, t, p, o = args
-            new_commands = [t]
+            v, q1, t, q2, p, o = args
+            attachments[v] = o
+            new_commands = [t, Attach(v, arm=BASE_LINK, grasp=None, body=attachments[v])]
         elif name == 'place':
-            v, q, t, p, o = args
-            new_commands = [t]
+            v, q1, t, q2, p, o = args
+            new_commands = [t, Detach(v, arm=BASE_LINK, body=attachments[v])]
         else:
             raise ValueError(name)
         print(i, name, args, new_commands)
@@ -239,12 +240,12 @@ def main():
     st = time.time()
     with LockRenderer(lock=not args.enable):
         solution = solve(pddlstream_problem, algorithm=args.algorithm, stream_info=stream_info,
-                                planner=planner, max_planner_time=max_planner_time, debug=False,
-                                unit_costs=args.unit, success_cost=success_cost,
-                                max_time=args.max_time, verbose=True,
-                                unit_efforts=True, effort_weight=1,
-                                search_sample_ratio=search_sample_ratio, 
-                                temp_dir=os.path.join(save_dir, "pddl"))
+                         planner=planner, max_planner_time=max_planner_time, debug=False,
+                         unit_costs=args.unit, success_cost=success_cost,
+                         max_time=args.max_time, verbose=True,
+                         unit_efforts=True, effort_weight=1,
+                         search_sample_ratio=search_sample_ratio, 
+                         temp_dir=os.path.join(save_dir, "pddl"))
     
     print_solution(solution)
     print("Time: "+str(time.time()-st))

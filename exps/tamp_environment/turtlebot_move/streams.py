@@ -1,7 +1,7 @@
 from __future__ import print_function
 
 import numpy as np
-from pybullet_tools.pr2_primitives import Conf, Trajectory, create_trajectory, Command
+from pybullet_tools.pr2_primitives import Conf, Trajectory, create_trajectory, Attach, Detach
 from pybullet_tools.utils import get_point, get_custom_limits, all_between, pairwise_collision, \
     plan_joint_motion, joints_from_names, set_pose, get_oobb,\
     remove_body, get_visual_data, get_pose, get_aabb_extent, aabb_from_extent_center,\
@@ -107,9 +107,9 @@ class BagOfBoundingBoxes(Environment):
     
 
 def get_ik(problem):
-    def ik(pose):
+    def ik(robot, object, pose):
         conf = copy.deepcopy(problem.init_conf)
-        conf.positions = pose[0][:2]
+        conf.values = pose.pose[0][:2]
         return Output(conf)
     return ik
 
@@ -143,6 +143,8 @@ def get_anytime_motion_fn(problem, custom_limits={}, collisions=True, teleport=F
                 break
             num_samples = num_samples*factor
         
+        
+        print("Q1: "+str(q1.values)+" Q2: "+str(q2.values))
         print("Path: "+str(path))
         if(len(path) == 0):
             print("Max samples reached")

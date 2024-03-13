@@ -6,10 +6,10 @@
     :certified (Motion ?v ?q1 ?t ?q2)
   )
   (:stream sample-ik
-    :inputs (?o ?p)
-    :domain (and (Pose ?o ?p))
+    :inputs (?v ?o ?p)
+    :domain (and (Pose ?o ?p) (Rover ?v))
     :outputs (?q)
-    :certified (Kin ?o ?p ?q)
+    :certified (and (Kin ?o ?p ?q) (Conf ?v ?q))
   )
 )
 

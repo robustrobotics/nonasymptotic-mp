@@ -5,13 +5,42 @@ from pybullet_tools.utils import set_point, Point, create_box, \
     stable_z, load_model, TURTLEBOT_URDF, joints_from_names, \
     set_joint_positions, get_joint_positions, remove_body, \
     GREY, TAN, YELLOW, get_bodies, pairwise_collision, sample_placement, \
-    wait_if_gui, get_pose, Pose, create_cylinder
-from pybullet_tools.pr2_primitives import Conf
+    wait_if_gui, get_pose, Pose, create_cylinder, flatten_links, \
+    get_moving_links
 from typing import List, Tuple
 from dataclasses import dataclass, field
 
 BOT_RADIUS = 0.179
 
+@dataclass
+class ObjectPose:
+    pose: Pose
+
+@dataclass
+class Conf:
+    
+    body: int
+    joints: List[int]
+    values: List[float] = None
+    init: bool = False
+    
+    def __post_init__(self):
+        if(self.values is None):
+            get_joint_positions(self.body, self.joints)
+
+    @property
+    def bodies(self):  # TODO: misnomer
+        return flatten_links(self.body, get_moving_links(self.body, self.joints))
+
+    def assign(self):
+        set_joint_positions(self.body, self.joints, self.values)
+
+    def iterate(self):
+        yield self
+
+    def __repr__(self):
+        return "q{}".format(id(self) % 1000)
+    
 def sample_placements(body_surfaces, obstacles=None, min_distances={}):
     if obstacles is None:
         obstacles = [body for body in get_bodies() if body not in body_surfaces]
@@ -30,6 +59,7 @@ def sample_placements(body_surfaces, obstacles=None, min_distances={}):
     return True
 
 BASE_JOINTS = ['x', 'y', 'theta']
+BASE_LINK = 'base_link'
 
 def get_base_joints(robot):
     return joints_from_names(robot, BASE_JOINTS)
@@ -192,11 +222,11 @@ def hallway_manip(robot_scale=0.2, dd=0.1, num_target=1):
 
     body_surfaces = {target: room1_floor for target in targets}
     sample_placements(body_surfaces, obstacles=obstacles)
-    target_goal_poses = [get_pose(target) for target in targets]
+    target_goal_poses = [ObjectPose(get_pose(target)) for target in targets]
         
     body_surfaces = {target: room2_floor for target in targets}
     sample_placements(body_surfaces, obstacles=obstacles)
-    target_init_poses = [get_pose(target) for target in targets]
+    target_init_poses = [ObjectPose(get_pose(target)) for target in targets]
 
     body_surfaces = {}
     init_conf = Conf(rover, base_joints[:2], (-hallway_length/2 - room_length/2, room_length/2))

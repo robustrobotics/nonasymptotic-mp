@@ -11,6 +11,7 @@
     (AtPose ?o ?p)
     (Holding ?o)
     (Kin ?o ?p ?q)
+    (Rover ?r)
   )
 
   ;(:action move
@@ -23,7 +24,8 @@
 
   (:action pick
     :parameters (?v ?q1 ?t ?q2 ?p ?o)
-    :precondition (and (Motion ?v ?q1 ?t ?q2)
+    :precondition (and (Rover ?v)
+                       (Motion ?v ?q1 ?t ?q2)
                        (AtConf ?v ?q1)
                        (AtPose ?o ?p)
                        (Kin ?o ?p ?q2)
@@ -38,7 +40,8 @@
   )
   (:action place
     :parameters (?v ?q1 ?t ?q2 ?p ?o)
-    :precondition (and (Motion ?v ?q1 ?t ?q2)
+    :precondition (and (Rover ?v)
+                       (Motion ?v ?q1 ?t ?q2)
                        (AtConf ?v ?q1)
                        (Holding ?o)
                        (Target ?o)
