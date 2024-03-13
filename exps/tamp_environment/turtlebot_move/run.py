@@ -134,13 +134,8 @@ def pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=N
         custom_limits.update(get_custom_limits(problem.rover, problem.limits))
 
     stream_map = {
-        'sample-motion': from_fn(get_anytime_motion_fn(problem, custom_limits=custom_limits,
-                                               collisions=collisions, algorithm=mp_alg, 
-                                               start_samples=100, 
-                                               end_samples=max_samples,
-                                               factor=1.5,
-                                               connect_radius=connect_radius,
-                                               **kwargs)),
+        'sample-motion': from_fn(get_anytime_motion_fn(problem, custom_limits=custom_limits, start_samples=100, end_samples=max_samples, **kwargs)),
+        'sample-motion-holding': from_fn(get_anytime_motion_fn(problem, custom_limits=custom_limits, start_samples=100, end_samples=max_samples, holding=True, **kwargs)),
         'sample-ik': from_fn(get_ik(problem)),
     }
 
@@ -175,14 +170,14 @@ def main():
     parser.add_argument('--deterministic', action='store_true', help='Uses a deterministic sampler')
     parser.add_argument('--optimal', action='store_true', help='Runs in an anytime mode')
     parser.add_argument('--max-time', default=240, type=int, help='The max time')
-    parser.add_argument('--max-samples', default=300, type=int, help='Max num samples for motion planning')
-    parser.add_argument('--delta', default=0.3, type=float, help='Max num samples for motion planning')
-    parser.add_argument('--mp_alg', '--mp-alg', default="prm", type=str, help='Algorithm to use for motion planning')
+    parser.add_argument('--max-samples', default=2000, type=int, help='Max num samples for motion planning')
+    parser.add_argument('--delta', default=0.3, type=float, help='Difference between the hallway width and the largest object that needs to fit thorugh the hallway')
     parser.add_argument('--seed', default=-1, type=int, help='Seed for selection of robot size and collision placement')
     parser.add_argument('--save-dir', default="./logs/debug", type=str, help='Directory to save planning results')
     parser.add_argument('--vis', action='store_true', help='GUI during planning')
     parser.add_argument('--teleport', action='store_true', help='Teleports between configurations')
     parser.add_argument('--randomize-delta', action='store_true', help='Teleports between configurations')
+    parser.add_argument('--num-targets', type=float, default=5, help='Number of objects to carry across the hallway')
     parser.add_argument('--adaptive-n', action='store_true', help='Teleports between configurations')
     parser.add_argument('--simulate', action='store_true', help='Simulates the system')
     args = parser.parse_args()
@@ -207,23 +202,19 @@ def main():
     else:
         delta = args.delta
 
-    rovers_problem = hallway_manip(robot_scale=robot_scale, dd=delta, num_target=5)
+    rovers_problem = hallway_manip(robot_scale=robot_scale, dd=delta, num_target=args.num_targets)
 
     max_samples = args.max_samples
-    connect_radius = 0.1
     
     if(args.adaptive_n):
-        max_samples, connect_radius = compute_numerical_bound(delta, 0.9, 4, 2, None)
+        max_samples, _ = compute_numerical_bound(delta, 0.9, 4, 2, None)
     
     print("Delta: ")
     print(delta)
     print("Max samples: "+str(max_samples))
-    print("Connection radius: "+str(connect_radius))
     
     pddlstream_problem = pddlstream_from_problem(rovers_problem, collisions=not args.cfree, teleport=args.teleport,
-                                                 holonomic=True, reversible=True, use_aabb=True, max_samples=max_samples, 
-                                                 connect_radius=connect_radius,
-                                                 mp_alg=args.mp_alg)
+                                                 holonomic=True, reversible=True, use_aabb=True, max_samples=max_samples)
     print(pddlstream_problem)
     stream_info = {
         'sample-motion': StreamInfo(overhead=10),

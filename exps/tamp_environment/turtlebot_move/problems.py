@@ -151,7 +151,7 @@ def hallway_manip(robot_scale=0.2, dd=0.1, num_target=1):
         target_sizes[target] = target_radius
         targets.append(target)
         
-    hallway_width = max(list(target_sizes.values())) + wall_thickness + dd  # The width of the hallway
+    hallway_width = max(list(target_sizes.values()))*2 + wall_thickness + dd  # The width of the hallway
         
     # Walls for Room 1
     room1_front_wall = create_box(room_length+mound_height, wall_thickness, wall_height, color=GREY)

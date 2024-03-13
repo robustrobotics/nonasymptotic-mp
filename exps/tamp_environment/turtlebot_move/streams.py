@@ -111,9 +111,20 @@ def get_ik(problem):
         return Output(conf)
     return ik
 
-def get_anytime_motion_fn(problem, custom_limits={}, collisions=True, teleport=False, holonomic=False, reversible=False, algorithm="prm", start_samples=10, end_samples=100, factor=1.5, connect_radius=None, **kwargs):
+def get_anytime_motion_fn(problem, 
+                          custom_limits={}, 
+                          teleport=False, 
+                          start_samples=10, 
+                          end_samples=100, 
+                          factor=1.5,
+                          holding=False,
+                          **kwargs):
+    def test_holding(rover, q1, q2, obj):
+        return test(rover, q1, q2, obj=obj)
     
-    def test(rover, q1, q2, fluents=[]):
+    def test(rover, q1, q2, obj=None):
+        holding = False
+        
         start = np.array(q1.values[:2])
         goal = np.array(q2.values[:2])
 
@@ -121,7 +132,12 @@ def get_anytime_motion_fn(problem, custom_limits={}, collisions=True, teleport=F
         
         obstacles = set(problem.obstacles)
         obstacle_oobbs = [get_oobb(obstacle) for obstacle in obstacles]
-        robot_shape = aabb_from_extent_center(get_aabb_extent(get_aabb(rover)))
+        if(obj is not None):
+            # Robot extent is the extent of the held object
+            robot_shape = aabb_from_extent_center(get_aabb_extent(get_aabb(obj)))
+        else:
+            robot_shape = aabb_from_extent_center(get_aabb_extent(get_aabb(rover)))
+            
         prm_env_2d = BagOfBoundingBoxes(seed=seed, robot_shape=(robot_shape), obstacle_oobbs=obstacle_oobbs, custom_limits=custom_limits)
         prm = SimpleNearestNeighborRadiusPRM(32, 
                                      prm_env_2d.is_motion_valid, 
@@ -146,6 +162,7 @@ def get_anytime_motion_fn(problem, custom_limits={}, collisions=True, teleport=F
         print("Path: "+str(path))
         if(len(path) == 0):
             print("Max samples reached")
+            return None
         else:
             print("Found solution in")
             print(num_samples)
@@ -157,8 +174,8 @@ def get_anytime_motion_fn(problem, custom_limits={}, collisions=True, teleport=F
             
         ht = create_trajectory(rover, q2.joints, path)
         return Output(ht)
-        
-    return test
+    
+    return test if not holding else test_holding
 
 def interpolate_vectors(vectors, threshold):
     # Convert the list of vectors to a NumPy array for efficient computation

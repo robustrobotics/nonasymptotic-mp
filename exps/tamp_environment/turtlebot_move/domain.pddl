@@ -12,6 +12,7 @@
     (Holding ?o)
     (Kin ?o ?p ?q)
     (Rover ?r)
+    (MotionHolding ?v ?q1 ?t ?q2 ?o)
   )
 
   ;(:action move
@@ -41,7 +42,7 @@
   (:action place
     :parameters (?v ?q1 ?t ?q2 ?p ?o)
     :precondition (and (Rover ?v)
-                       (Motion ?v ?q1 ?t ?q2)
+                       (MotionHolding ?v ?q1 ?t ?q2 ?o)
                        (AtConf ?v ?q1)
                        (Holding ?o)
                        (Target ?o)
