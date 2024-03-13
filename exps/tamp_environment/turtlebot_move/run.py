@@ -103,7 +103,7 @@ def get_custom_limits(robot, base_limits, yaw_limit=None):
 #     return PDDLProblem(domain_pddl, constant_map, stream_pddl, stream_map, init, goal_formula)
 
 
-def pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=None, connect_radius=None, **kwargs):
+def pddlstream_from_problem(problem, min_samples=None, max_samples=None, factor=1.0, **kwargs):
     # TODO: push and attach to movable objects
 
     domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
@@ -134,8 +134,8 @@ def pddlstream_from_problem(problem, collisions=True, mp_alg=None, max_samples=N
         custom_limits.update(get_custom_limits(problem.rover, problem.limits))
 
     stream_map = {
-        'sample-motion': from_fn(get_anytime_motion_fn(problem, custom_limits=custom_limits, start_samples=100, end_samples=max_samples, **kwargs)),
-        'sample-motion-holding': from_fn(get_anytime_motion_fn(problem, custom_limits=custom_limits, start_samples=100, end_samples=max_samples, holding=True, **kwargs)),
+        'sample-motion': from_fn(get_anytime_motion_fn(problem, custom_limits=custom_limits, start_samples=min_samples, end_samples=max_samples, factor=factor, **kwargs)),
+        'sample-motion-holding': from_fn(get_anytime_motion_fn(problem, custom_limits=custom_limits, start_samples=min_samples, end_samples=max_samples, factor = factor, holding=True, **kwargs)),
         'sample-ik': from_fn(get_ik(problem)),
     }
 
@@ -170,7 +170,9 @@ def main():
     parser.add_argument('--deterministic', action='store_true', help='Uses a deterministic sampler')
     parser.add_argument('--optimal', action='store_true', help='Runs in an anytime mode')
     parser.add_argument('--max-time', default=240, type=int, help='The max time')
+    parser.add_argument('--min-samples', default=10, type=int, help='Max num samples for motion planning')
     parser.add_argument('--max-samples', default=2000, type=int, help='Max num samples for motion planning')
+    parser.add_argument('--factor', default=1.2, type=int, help='The rate at which we geometrically expand from min-samples to max-samples')
     parser.add_argument('--delta', default=0.3, type=float, help='Difference between the hallway width and the largest object that needs to fit thorugh the hallway')
     parser.add_argument('--seed', default=-1, type=int, help='Seed for selection of robot size and collision placement')
     parser.add_argument('--save-dir', default="./logs/debug", type=str, help='Directory to save planning results')
@@ -208,13 +210,14 @@ def main():
     
     if(args.adaptive_n):
         max_samples, _ = compute_numerical_bound(delta, 0.9, 4, 2, None)
+        min_samples = max_samples-1
     
     print("Delta: ")
     print(delta)
     print("Max samples: "+str(max_samples))
     
     pddlstream_problem = pddlstream_from_problem(rovers_problem, collisions=not args.cfree, teleport=args.teleport,
-                                                 holonomic=True, reversible=True, use_aabb=True, max_samples=max_samples)
+                                                 holonomic=True, reversible=True, use_aabb=True, min_samples=min_samples, max_samples=max_samples, factor=factor)
     print(pddlstream_problem)
     stream_info = {
         'sample-motion': StreamInfo(overhead=10),
