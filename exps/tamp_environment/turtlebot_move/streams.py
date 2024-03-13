@@ -1,7 +1,7 @@
 from __future__ import print_function
 
 import numpy as np
-from pybullet_tools.pr2_primitives import Conf, Trajectory, create_trajectory, Attach, Detach
+from pybullet_tools.pr2_primitives import Conf, Trajectory, create_trajectory, Attach, Detach 
 from pybullet_tools.utils import get_point, get_custom_limits, all_between, pairwise_collision, \
     plan_joint_motion, joints_from_names, set_pose, get_oobb,\
     remove_body, get_visual_data, get_pose, get_aabb_extent, aabb_from_extent_center,\
@@ -154,11 +154,27 @@ def get_anytime_motion_fn(problem, custom_limits={}, collisions=True, teleport=F
 
         path = np.concatenate([np.expand_dims(start, axis=0), path, np.expand_dims(goal, axis=0)], axis=0).tolist()
         
-        ht = create_trajectory(rover, q2.joints, path)
+        ht = create_trajectory(rover, q2.joints, interpolate_vectors(path, threshold=0.025))
         return Output(ht)
         
     return test
 
+def interpolate_vectors(vectors, threshold):
+    # Convert the list of vectors to a NumPy array for efficient computation
+    vectors = np.array(vectors)
+    interpolated_vectors = [vectors[0]]
+    
+    for i in range(len(vectors) - 1):
+        start, end = vectors[i], vectors[i + 1]
+        dist = np.linalg.norm(end - start)
+        if dist > threshold:
+            steps = int(np.ceil(dist / threshold)) - 1
+            # Generate the interpolated points
+            interpolated_steps = np.linspace(start, end, steps + 2, endpoint=False)[1:]
+            interpolated_vectors.extend(interpolated_steps)
+        interpolated_vectors.append(end)
+    
+    return np.array(interpolated_vectors)
 
 def get_motion_fn(problem, custom_limits={}, collisions=True, teleport=False, holonomic=False, reversible=False, algorithm="prm", num_samples=10, connect_radius=None, **kwargs):
     def test(rover, q1, q2, fluents=[]):

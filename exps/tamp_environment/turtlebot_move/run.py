@@ -8,10 +8,9 @@ from pddlstream.language.constants import And, print_solution, PDDLProblem
 from pddlstream.language.stream import StreamInfo
 from pddlstream.language.generator import from_fn
 from pddlstream.utils import read, INF, get_file_path
-from pybullet_tools.pr2_primitives import control_commands, apply_commands, State
+from pybullet_tools.pr2_primitives import control_commands, apply_commands, State, Attach, Detach
 from pybullet_tools.utils import connect, disconnect, has_gui, LockRenderer, WorldSaver, wait_if_gui, joint_from_name, get_pose
-from pybullet_tools.pr2_primitives import Conf, Trajectory, create_trajectory, Attach, Detach
-from streams import get_anytime_motion_fn, get_ik
+from streams import get_anytime_motion_fn, get_ik, interpolate_vectors
 from nonasymptotic.util import compute_numerical_bound
 from problems import hallway, BOT_RADIUS, hallway_manip, BASE_LINK
 import random
@@ -172,21 +171,20 @@ def post_process(problem, plan):
 def main():
     # Unoptimized code: 300 takes 1:15
     parser = create_parser()
-    parser.add_argument('-cfree', action='store_true', help='Disables collisions')
-    parser.add_argument('-deterministic', action='store_true', help='Uses a deterministic sampler')
-    parser.add_argument('-optimal', action='store_true', help='Runs in an anytime mode')
-    parser.add_argument('-t', '--max-time', default=240, type=int, help='The max time')
-    parser.add_argument('-ms', '--max-samples', default=300, type=int, help='Max num samples for motion planning')
-    parser.add_argument('-d', '--delta', default=0.3, type=float, help='Max num samples for motion planning')
-    parser.add_argument('-mp_alg', '--mp-alg', default="prm", type=str, help='Algorithm to use for motion planning')
-    parser.add_argument('-seed', '--seed', default=-1, type=int, help='Seed for selection of robot size and collision placement')
-    parser.add_argument('-sd', '--save-dir', default="./logs/debug", type=str, help='Directory to save planning results')
-    parser.add_argument('-enable', action='store_true', help='Enables rendering during planning')
+    parser.add_argument('--cfree', action='store_true', help='Disables collisions')
+    parser.add_argument('--deterministic', action='store_true', help='Uses a deterministic sampler')
+    parser.add_argument('--optimal', action='store_true', help='Runs in an anytime mode')
+    parser.add_argument('--max-time', default=240, type=int, help='The max time')
+    parser.add_argument('--max-samples', default=300, type=int, help='Max num samples for motion planning')
+    parser.add_argument('--delta', default=0.3, type=float, help='Max num samples for motion planning')
+    parser.add_argument('--mp_alg', '--mp-alg', default="prm", type=str, help='Algorithm to use for motion planning')
+    parser.add_argument('--seed', default=-1, type=int, help='Seed for selection of robot size and collision placement')
+    parser.add_argument('--save-dir', default="./logs/debug", type=str, help='Directory to save planning results')
     parser.add_argument('--vis', action='store_true', help='GUI during planning')
-    parser.add_argument('-teleport', action='store_true', help='Teleports between configurations')
+    parser.add_argument('--teleport', action='store_true', help='Teleports between configurations')
     parser.add_argument('--randomize-delta', action='store_true', help='Teleports between configurations')
     parser.add_argument('--adaptive-n', action='store_true', help='Teleports between configurations')
-    parser.add_argument('-simulate', action='store_true', help='Simulates the system')
+    parser.add_argument('--simulate', action='store_true', help='Simulates the system')
     args = parser.parse_args()
 
     connect(use_gui=args.vis)
@@ -209,7 +207,7 @@ def main():
     else:
         delta = args.delta
 
-    rovers_problem = hallway_manip(robot_scale=robot_scale, dd=delta, num_target=1)
+    rovers_problem = hallway_manip(robot_scale=robot_scale, dd=delta, num_target=5)
 
     max_samples = args.max_samples
     connect_radius = 0.1
@@ -238,7 +236,7 @@ def main():
     saver = WorldSaver()
     
     st = time.time()
-    with LockRenderer(lock=not args.enable):
+    with LockRenderer(lock=True):
         solution = solve(pddlstream_problem, algorithm=args.algorithm, stream_info=stream_info,
                          planner=planner, max_planner_time=max_planner_time, debug=False,
                          unit_costs=args.unit, success_cost=success_cost,
