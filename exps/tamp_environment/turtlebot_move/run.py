@@ -210,7 +210,7 @@ def main():
 
     max_samples = args.max_samples
     min_samples = args.min_samples
-    
+
     if(args.adaptive_n):
         max_samples, _ = compute_numerical_bound(delta, 0.9, 4, 2, None)
         min_samples = max_samples-1
@@ -220,7 +220,7 @@ def main():
     print("Max samples: "+str(max_samples))
     
     pddlstream_problem = pddlstream_from_problem(rovers_problem, collisions=not args.cfree, teleport=args.teleport,
-                                                 holonomic=True, reversible=True, use_aabb=True, min_samples=min_samples, max_samples=max_samples, factor=factor)
+                                                 holonomic=True, reversible=True, use_aabb=True, min_samples=min_samples, max_samples=max_samples, factor=args.factor)
     print(pddlstream_problem)
     stream_info = {
         'sample-motion': StreamInfo(overhead=10),
