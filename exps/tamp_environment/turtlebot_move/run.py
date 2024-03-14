@@ -184,6 +184,8 @@ def main():
     parser.add_argument('--simulate', action='store_true', help='Simulates the system')
     args = parser.parse_args()
 
+    print("Experiment arguments:")
+    print(vars(args))
     connect(use_gui=args.vis)
     
     save_dir = os.path.join(args.save_dir, str(time.time()))

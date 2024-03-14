@@ -225,7 +225,6 @@ def hallway_manip(robot_scale=0.2, dd=0.1, num_target=1):
     
     base_joints = get_base_joints(rover)
 
-
     body_surfaces = {target: room1_floor for target in targets}
     sample_placements(body_surfaces, obstacles=obstacles)
     target_goal_poses = [ObjectPose(get_pose(target)) for target in targets]
