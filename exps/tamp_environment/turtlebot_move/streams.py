@@ -16,6 +16,7 @@ from tqdm import tqdm
 import itertools
 import random
 import copy
+from nonasymptotic.util import compute_numerical_bound
 
 VIS_RANGE = 2
 COM_RANGE = 2*VIS_RANGE
@@ -118,12 +119,12 @@ def get_anytime_motion_fn(problem,
                           end_samples=100, 
                           factor=1.5,
                           holding=False,
+                          adaptive_n=False,
                           **kwargs):
     def test_holding(rover, q1, q2, obj):
         return test(rover, q1, q2, obj=obj)
     
     def test(rover, q1, q2, obj=None):
-        holding = False
         
         start = np.array(q1.values[:2])
         goal = np.array(q2.values[:2])
@@ -134,10 +135,22 @@ def get_anytime_motion_fn(problem,
         obstacle_oobbs = [get_oobb(obstacle) for obstacle in obstacles]
         if(obj is not None):
             # Robot extent is the extent of the held object
-            robot_shape = aabb_from_extent_center(get_aabb_extent(get_aabb(obj)))
+            robot_shape:AABB = aabb_from_extent_center(get_aabb_extent(get_aabb(obj)))
         else:
-            robot_shape = aabb_from_extent_center(get_aabb_extent(get_aabb(rover)))
+            robot_shape:AABB = aabb_from_extent_center(get_aabb_extent(get_aabb(rover)))
             
+        if(adaptive_n):
+            delta = problem.hallway_gap-(robot_shape.upper[0]-robot_shape.lower[0])
+            print("[Inside MP] delta: "+str(delta))
+            max_samples, _ = compute_numerical_bound(delta, 0.9, 4, 2, None)
+            min_samples = max_samples-1
+        else:
+            min_samples=start_samples
+            max_samples=end_samples
+        
+        print("[Inside MP] min_samples: "+str(min_samples))
+        print("[Inside MP] max_samples: "+str(max_samples))
+
         prm_env_2d = BagOfBoundingBoxes(seed=seed, robot_shape=(robot_shape), obstacle_oobbs=obstacle_oobbs, custom_limits=custom_limits)
         prm = SimpleNearestNeighborRadiusPRM(32, 
                                      prm_env_2d.is_motion_valid, 
@@ -148,8 +161,8 @@ def get_anytime_motion_fn(problem,
         assert prm_env_2d.is_motion_valid(np.expand_dims(start, axis=0), np.expand_dims(start, axis=0)), "Start in collision"
         assert prm_env_2d.is_motion_valid(np.expand_dims(goal, axis=0), np.expand_dims(goal, axis=0)), "Goal in collision"
         
-        num_samples = start_samples
-        while(num_samples<end_samples+1):
+        num_samples = min_samples
+        while(num_samples<max_samples+1):
             print("Num samples: "+str(int(num_samples)))
             prm.grow_to_n_samples(int(num_samples))
             _, path = prm.query_best_solution(start, goal)

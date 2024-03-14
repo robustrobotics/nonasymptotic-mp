@@ -4,9 +4,12 @@ from collections import OrderedDict
 from pybullet_tools.utils import set_point, Point, create_box, \
     stable_z, load_model, TURTLEBOT_URDF, joints_from_names, \
     set_joint_positions, get_joint_positions, remove_body, \
-    GREY, TAN, YELLOW, get_bodies, pairwise_collision, sample_placement, \
+    GREY, TAN, YELLOW, get_bodies, pairwise_collision, \
     wait_if_gui, get_pose, Pose, create_cylinder, flatten_links, \
-    get_moving_links
+    get_moving_links, get_aabb, Euler, set_pose, AABB, multiply, \
+    sample_aabb, get_point, get_center_extent, aabb_empty, unit_pose, \
+    get_aabb_extent, aabb_from_extent_center
+    
 from typing import List, Tuple
 from dataclasses import dataclass, field
 import random
@@ -41,7 +44,44 @@ class Conf:
 
     def __repr__(self):
         return "q{}".format(id(self) % 1000)
-    
+
+
+def sample_placement_on_aabb(
+    top_body,
+    bottom_aabb,
+    top_pose=unit_pose(),
+    percent=1.0,
+    max_attempts=50,
+    epsilon=1e-3,
+    **kwargs
+):
+    # TODO: transform into the coordinate system of the bottom
+    # TODO: maybe I should instead just require that already in correct frame
+    for _ in range(max_attempts):
+        theta = 0
+        rotation = Euler(yaw=theta)
+        set_pose(top_body, multiply(Pose(euler=rotation), top_pose), **kwargs)
+        center, extent = get_center_extent(top_body, **kwargs)
+        lower = (np.array(bottom_aabb[0]) + percent * extent / 2)[
+            :2
+        ]  # TODO: scale_aabb
+        upper = (np.array(bottom_aabb[1]) - percent * extent / 2)[:2]
+        aabb = AABB(lower, upper)
+        if aabb_empty(aabb):
+            continue
+        x, y = sample_aabb(aabb)
+        z = (bottom_aabb[1] + extent / 2.0)[2] + epsilon
+        point = np.array([x, y, z]) + (get_point(top_body, **kwargs) - center)
+        pose = multiply(Pose(point, rotation), top_pose)
+        set_pose(top_body, pose, **kwargs)
+        return pose
+    return None
+
+
+def sample_placement(top_body, bottom_body, bottom_link=None, **kwargs):
+    bottom_aabb = get_aabb(bottom_body, link=bottom_link, **kwargs)
+    return sample_placement_on_aabb(top_body, bottom_aabb, **kwargs)
+
 def sample_placements(body_surfaces, obstacles=None, min_distances={}):
     if obstacles is None:
         obstacles = [body for body in get_bodies() if body not in body_surfaces]
@@ -84,6 +124,7 @@ class RoversProblem():
     target_sizes:List[float] = field(default_factory=lambda: [])
     init_conf:Conf = None
     goal_conf:Conf = None
+    hallway_gap:float=0
 
 #######################################################
 def hallway(robot_scale=0.2, dd=0.1):
@@ -148,11 +189,14 @@ def hallway_manip(robot_scale=0.2, dd=0.1, num_target=1):
     for _ in range(num_target):
         target_radius = random.uniform(min_object_size, min_object_size+0.1)
         target = create_cylinder(target_radius, 0.1, color=YELLOW)
+        
         target_sizes[target] = target_radius
         targets.append(target)
-        
-    hallway_width = max(list(target_sizes.values()))*2 + wall_thickness + dd  # The width of the hallway
-        
+    
+    
+    hallway_gap = max(list(target_sizes.values()))*2 + dd  
+    hallway_width = hallway_gap + wall_thickness # The width of the hallway
+    
     # Walls for Room 1
     room1_front_wall = create_box(room_length+mound_height, wall_thickness, wall_height, color=GREY)
     set_point(room1_front_wall, Point(x=-hallway_length/2 - room_length/2, y=0, z=wall_height/2))
@@ -233,6 +277,10 @@ def hallway_manip(robot_scale=0.2, dd=0.1, num_target=1):
     sample_placements(body_surfaces, obstacles=obstacles)
     target_init_poses = [ObjectPose(get_pose(target)) for target in targets]
 
+    for target in targets:
+        print(target_sizes[target])
+        print(aabb_from_extent_center(get_aabb_extent(get_aabb(target))))
+
     body_surfaces = {}
     init_conf = Conf(rover, base_joints[:2], (-hallway_length/2 - room_length/2, room_length/2))
     # goal_conf =  Conf(rover, base_joints[:2], (hallway_length/2 + room_length/2, room_length/2))
@@ -247,7 +295,8 @@ def hallway_manip(robot_scale=0.2, dd=0.1, num_target=1):
                          targets=targets, 
                          target_init_poses=target_init_poses,
                          target_goal_poses=target_goal_poses,
-                         target_sizes=target_sizes)
+                         target_sizes=target_sizes,
+                         hallway_gap=hallway_gap)
 
 def hallway(robot_scale=0.2, dd=0.1):
     base_extent = 3.0
