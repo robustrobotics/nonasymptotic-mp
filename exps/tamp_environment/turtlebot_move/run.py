@@ -209,6 +209,7 @@ def main():
     rovers_problem = hallway_manip(robot_scale=robot_scale, dd=delta, num_target=args.num_targets)
 
     max_samples = args.max_samples
+    min_samples = args.min_samples
     
     if(args.adaptive_n):
         max_samples, _ = compute_numerical_bound(delta, 0.9, 4, 2, None)
