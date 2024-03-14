@@ -180,19 +180,22 @@ def hallway_manip(robot_scale=0.2, dd=0.1, num_target=1):
     wall_thickness = mound_height  # The thickness of the walls
     wall_height = mound_height  # The height of the walls
     
-    targets = []
-    target_sizes = {}
-
     # Make each obstacle have a size between the robot size and the hallway witdh, 
     # with one of the objects being only dd smaller than the hallway
+    assert num_target > 0
+    max_target_diff = 0.1
     min_object_size = robot_scale * BOT_RADIUS
-    for _ in range(num_target):
-        target_radius = random.uniform(min_object_size, min_object_size+0.1)
+
+    max_object_size = min_object_size+max_target_diff
+    targets = [create_cylinder(max_object_size, 0.1, color=YELLOW)]
+    target_sizes = {targets[0]: max_object_size}
+    
+    for _ in range(num_target-1):
+        u = np.random.uniform(0, 1)
+        target_radius = min_object_size + (max_object_size - min_object_size) * (1 - np.sqrt(1 - u))
         target = create_cylinder(target_radius, 0.1, color=YELLOW)
-        
         target_sizes[target] = target_radius
         targets.append(target)
-    
     
     hallway_gap = max(list(target_sizes.values()))*2 + dd  
     hallway_width = hallway_gap + wall_thickness # The width of the hallway
