@@ -29,6 +29,41 @@ def compute_sauer_shelah_bound(m_samples, rho, vc_dim):
     return ss_comb_sum * decay_rate
 
 
+def doubling_search_over_sauer_shelah(rho, vc_dim, success_prob):
+    # we're exploiting the monotonicity of the increase/decrease behavior of the probability bound.
+    failure_prob = 1 - success_prob
+
+    m_samples_lb = 1
+    m_samples_ub = 2
+    while True:
+        cand_gamma = compute_sauer_shelah_bound(m_samples_ub, rho, vc_dim)
+        next_gamma = compute_sauer_shelah_bound(m_samples_ub + 1, rho, vc_dim)
+        if failure_prob >= cand_gamma > next_gamma:
+            break
+
+        m_samples_lb = m_samples_ub
+        m_samples_ub *= 2
+
+        if m_samples_ub > sys.maxsize:
+            raise OverflowError("Reached sample threshold for useful computation.")
+
+    # next, binary search down to the right number of samples.
+    while True:
+        if m_samples_ub == m_samples_lb + 1:
+            return m_samples_ub
+        elif m_samples_ub <= m_samples_lb:
+            raise ArithmeticError('Something wrong happened.')
+
+        test_samples = int((m_samples_lb + m_samples_ub) / 2)
+        # test if the tester is the sample count we're looking for
+        cand_gamma = compute_sauer_shelah_bound(test_samples, rho, vc_dim)
+
+        if cand_gamma > failure_prob:
+            m_samples_lb = test_samples
+        else:
+            m_samples_ub = test_samples
+
+
 def compute_numerical_bound(clearance, success_prob, coll_free_volume, dim, tol):
     """
     :param clearance: delta-clearance of the environment
@@ -53,36 +88,7 @@ def compute_numerical_bound(clearance, success_prob, coll_free_volume, dim, tol)
     # first, forward search on a doubling scheme to overshoot on the number of samples.
     # we stop if the probability is #1 decaying, and #2 we've exceeded desired probability
 
-    # we're exploiting the monotonicity of the increase/decrease behavior of the probability bound.
-    m_samples_lb = 1
-    m_samples_ub = 2
-    while True:
-        cand_gamma = compute_sauer_shelah_bound(m_samples_ub, rho, vc_dim)
-        next_gamma = compute_sauer_shelah_bound(m_samples_ub + 1, rho, vc_dim)
-        if failure_prob >= cand_gamma > next_gamma:
-            break
-
-        m_samples_lb = m_samples_ub
-        m_samples_ub *= 2
-
-        if m_samples_ub > sys.maxsize:
-            raise OverflowError("Reached sample threshold for useful computation.")
-
-    # next, binary search down to the right number of samples.
-    while True:
-        if m_samples_ub == m_samples_lb + 1:
-            return m_samples_ub, conn_r
-        elif m_samples_ub <= m_samples_lb:
-            raise ArithmeticError('Something wrong happened.')
-
-        test_samples = int((m_samples_lb + m_samples_ub) / 2)
-        # test if the tester is the sample count we're looking for
-        cand_gamma = compute_sauer_shelah_bound(test_samples, rho, vc_dim)
-
-        if cand_gamma > failure_prob:
-            m_samples_lb = test_samples
-        else:
-            m_samples_ub = test_samples
+    return doubling_search_over_sauer_shelah(rho, vc_dim, success_prob), conn_r
 
 
 def random_point_in_mpolygon(mpolygon, rng=None, vis=False):
