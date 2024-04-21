@@ -30,7 +30,7 @@ if __name__ == "__main__":
     min_min = 100
     max_max = 50000
     MAX_JOBS = 200
-    queue_size = 0
+    queue_size = 1
     arg_sets = [(0, 0, 1)] # adaptive bound
     num_points = 20
     for i in range(num_points):
