@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
     for i, arg_set in enumerate(arg_sets):
         queue_size = count_lines_of_command_output("squeue -u \"`echo $USER`\"")-2
-        
+
         while(queue_size>0):
             print("Queue size: "+str(queue_size))
             if(not debug):
@@ -49,6 +49,7 @@ if __name__ == "__main__":
         
         print("deploying {}/{}".format(i, len(arg_sets)))
         deploy_with_args(*arg_set, debug=debug)
+        time.sleep(10)
         
     
     
