@@ -16,15 +16,15 @@ def count_lines_of_command_output(command):
         print(f"Error executing command: {e}")
         return 0
     
-def deploy_with_args(min_samples, max_samples, adaptive):
-    subprocess.run(f"sbatch --array=1-100 deploy_experiments.py {min_samples} {max_samples} {adaptive}", shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+def deploy_with_args(min_samples, max_samples, adaptive, random_n):
+    subprocess.run(f"sbatch --array=1-100 deploy_experiments.sh {min_samples} {max_samples} {adaptive} {random_n}", shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
 if __name__ == "__main__":
     # An arg set is (min_samples, max_samples, adaptive-n bool)
     min_min = 100
     max_max = 50000
     MAX_JOBS = 200
-    arg_sets = [(0,0,1), (min_min, max_max, 0)]
+    arg_sets = [(0, 0, 1, 0), (min_min, max_max, 0, 1)]
     for num_samples in np.linspace(min_min, max_max+1, 10):
         arg_sets.append((int(num_samples), int(num_samples), 0))
     

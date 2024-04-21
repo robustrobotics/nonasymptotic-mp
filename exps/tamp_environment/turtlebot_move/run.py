@@ -179,6 +179,8 @@ def main():
     parser.add_argument('--randomize-delta', action='store_true', help='Teleports between configurations')
     parser.add_argument('--num-targets', type=float, default=5, help='Number of objects to carry across the hallway')
     parser.add_argument('--adaptive-n', action='store_true', help='Teleports between configurations')
+    parser.add_argument('--random-n', action='store_true', help='Teleports between configurations')
+    parser.add_argument('--incremental', action='store_true', help='Teleports between configurations')
     parser.add_argument('--simulate', action='store_true', help='Simulates the system')
     args = parser.parse_args()
 
@@ -212,7 +214,12 @@ def main():
     print("Delta: "+str(delta))
     print("Min samples: "+str(min_samples))
     print("Max samples: "+str(max_samples))
-    
+
+    if(not args.incremental or args.adaptive_n):
+        min_samples = max_samples-1
+    else:
+        min_samples = args.min_samples
+
     pddlstream_problem = pddlstream_from_problem(rovers_problem, collisions=not args.cfree, teleport=args.teleport,
                                                  holonomic=True, reversible=True, use_aabb=True, min_samples=min_samples, 
                                                  max_samples=max_samples, factor=args.factor, adaptive_n=args.adaptive_n)

@@ -12,7 +12,7 @@ do
         if [ $((i)) -eq  $((SLURM_ARRAY_TASK_ID + 0)) ]; then
             save_path="/home/gridsan/acurtis/runs/$algorithm-$seed-$n-$current_time"
             if [ "$3" -eq 0 ]; then
-                python ./turtlebot_move/run.py --seed=$seed --save-dir="$save_path" --min-samples="$1" --max-samples="$2" 
+                python ./turtlebot_move/run.py --seed=$seed --save-dir="$save_path" --min-samples="$1" --max-samples="$2" --random-n="$4" 
             elif [ "$3" -eq 1 ]; then
                 python ./turtlebot_move/run.py --seed=$seed --save-dir="$save_path" --adaptive-n
             fi
