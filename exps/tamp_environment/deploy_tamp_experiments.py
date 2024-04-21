@@ -38,13 +38,14 @@ if __name__ == "__main__":
         arg_sets.append((min_min-1, int(n), 0))
         arg_sets.append((int(n)-1, int(n), 0))
 
-    for arg_set in arg_sets:
-        if(not debug):
-            queue_size = count_lines_of_command_output("squeue -u \"`echo $USER`\"")-2
+    for i, arg_set in enumerate(arg_sets):
         while(queue_size>0):
+            print("Queue size: "+str(queue_size))
             if(not debug):
-                time.sleep(10 * 60)
+                queue_size = count_lines_of_command_output("squeue -u \"`echo $USER`\"")-2
+                time.sleep(5)
         
+        print("deploying {}/{}".format(i, len(arg_sets)))
         deploy_with_args(*arg_set, debug=debug)
         
     
