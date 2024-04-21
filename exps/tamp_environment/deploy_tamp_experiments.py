@@ -39,6 +39,8 @@ if __name__ == "__main__":
         arg_sets.append((int(n)-1, int(n), 0))
 
     for i, arg_set in enumerate(arg_sets):
+        queue_size = count_lines_of_command_output("squeue -u \"`echo $USER`\"")-2
+        
         while(queue_size>0):
             print("Queue size: "+str(queue_size))
             if(not debug):
