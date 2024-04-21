@@ -33,7 +33,7 @@ if __name__ == "__main__":
     queue_size = 0
     arg_sets = [(0, 0, 1)] # adaptive bound
     num_points = 20
-    for _ in range(num_points):
+    for i in range(num_points):
         n = random.uniform(min_min+1, max_max)
         arg_sets.append((min_min-1, int(n), 0))
         arg_sets.append((int(n)-1, int(n), 0))
