@@ -25,7 +25,7 @@ def deploy_with_args(min_samples, max_samples, adaptive, debug=False):
 
 if __name__ == "__main__":
     # An arg set is (min_samples, max_samples, adaptive-n bool)
-    debug=True
+    debug=False
     min_min = 100
     max_max = 50000
     MAX_JOBS = 200
