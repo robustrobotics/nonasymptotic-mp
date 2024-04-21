@@ -1,6 +1,7 @@
 import subprocess
 import numpy as np
 import time
+import random
 
 def count_lines_of_command_output(command):
     try:
@@ -31,8 +32,9 @@ if __name__ == "__main__":
     MAX_JOBS = 200
     queue_size = 0
     arg_sets = [(0, 0, 1)] # adaptive bound
-
-    for n in np.linspace(min_min, max_max, 20):
+    num_points = 20
+    for _ in range(num_points):
+        n = random.uniform(min_min+1, max_max)
         arg_sets.append((min_min-1, int(n), 0))
         arg_sets.append((int(n)-1, int(n), 0))
 
