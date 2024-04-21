@@ -16,24 +16,34 @@ def count_lines_of_command_output(command):
         print(f"Error executing command: {e}")
         return 0
     
-def deploy_with_args(min_samples, max_samples, adaptive, random_n):
-    subprocess.run(f"sbatch --array=1-100 deploy_experiments.sh {min_samples} {max_samples} {adaptive} {random_n}", shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+def deploy_with_args(min_samples, max_samples, adaptive, debug=False):
+    command_str = f"sbatch --array=1-100 deploy_experiments.sh {min_samples} {max_samples} {adaptive}"
+    if(not debug):
+        subprocess.run(command_str, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    else:
+        print(command_str)
 
 if __name__ == "__main__":
     # An arg set is (min_samples, max_samples, adaptive-n bool)
+    debug=True
     min_min = 100
     max_max = 50000
     MAX_JOBS = 200
-    arg_sets = [(0, 0, 1, 0), (min_min, max_max, 0, 1)]
-    for num_samples in np.linspace(min_min, max_max+1, 10):
-        arg_sets.append((int(num_samples), int(num_samples), 0))
-    
+    queue_size = 0
+    arg_sets = [(0, 0, 1)] # adaptive bound
+
+    for n in np.linspace(min_min, max_max, 20):
+        arg_sets.append((min_min-1, int(n), 0))
+        arg_sets.append((int(n)-1, int(n), 0))
+
     for arg_set in arg_sets:
-        queue_size = count_lines_of_command_output("squeue -u \"`echo $USER`\"")-2
+        if(not debug):
+            queue_size = count_lines_of_command_output("squeue -u \"`echo $USER`\"")-2
         while(queue_size>0):
-            time.sleep(10)
+            if(not debug):
+                time.sleep(10 * 60)
         
-        deploy_with_args(*arg_set)
+        deploy_with_args(*arg_set, debug=debug)
         
     
     

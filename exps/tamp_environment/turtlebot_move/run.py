@@ -179,8 +179,6 @@ def main():
     parser.add_argument('--randomize-delta', action='store_true', help='Teleports between configurations')
     parser.add_argument('--num-targets', type=float, default=5, help='Number of objects to carry across the hallway')
     parser.add_argument('--adaptive-n', action='store_true', help='Teleports between configurations')
-    parser.add_argument('--random-n', action='store_true', help='Teleports between configurations')
-    parser.add_argument('--incremental', action='store_true', help='Teleports between configurations')
     parser.add_argument('--simulate', action='store_true', help='Simulates the system')
     args = parser.parse_args()
 
@@ -207,15 +205,10 @@ def main():
         delta = args.delta
 
     rovers_problem = hallway_manip(robot_scale=robot_scale, dd=delta, num_target=args.num_targets)
-
-    if(args.random_n):
-        max_samples = int(np.random.uniform(args.min_samples, args.max_samples))
-    else:
-        max_samples = args.max_samples
-
+    max_samples = args.max_samples
     min_samples = args.min_samples
     
-    if(not args.incremental or args.adaptive_n):
+    if(args.adaptive_n):
         min_samples = max_samples-1
     else:
         min_samples = args.min_samples
