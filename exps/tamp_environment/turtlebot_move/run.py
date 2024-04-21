@@ -209,7 +209,7 @@ def main():
     rovers_problem = hallway_manip(robot_scale=robot_scale, dd=delta, num_target=args.num_targets)
 
     if(args.random_n):
-        max_samples = np.random.uniform(args.min_samples, args.max_samples)
+        max_samples = int(np.random.uniform(args.min_samples, args.max_samples))
     else:
         max_samples = args.max_samples
 
@@ -225,7 +225,8 @@ def main():
     print("Min samples: "+str(min_samples))
     print("Max samples: "+str(max_samples))
 
-
+    import sys
+    sys.exit()
     pddlstream_problem = pddlstream_from_problem(rovers_problem, collisions=not args.cfree, teleport=args.teleport,
                                                  holonomic=True, reversible=True, use_aabb=True, min_samples=min_samples, 
                                                  max_samples=max_samples, factor=args.factor, adaptive_n=args.adaptive_n)
