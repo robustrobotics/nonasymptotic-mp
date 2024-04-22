@@ -16,7 +16,7 @@ def count_lines_of_command_output():
         failed_output_lines = [ol for ol in output_lines if "launch failed requeued held" in ol]
         print("Squeue returned {} lines".format(str(len(output_lines)-1)))
         print("{} of them were failed".format(str(len(failed_output_lines))))
-        if(len(failed_output_lines)==(len(output_lines)-2) and len(output_lines)-2 > 0):
+        if(len(failed_output_lines)==(len(output_lines)-1) and len(output_lines)-1 > 0):
             print("Executing scancel")
             _ = subprocess.run(cancel_command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
@@ -54,7 +54,7 @@ if __name__ == "__main__":
             print("Queue size: "+str(queue_size))
             if(not debug):
                 queue_size = count_lines_of_command_output()
-                time.sleep(5)
+                time.sleep(30)
         
         print("deploying {}/{}".format(i, len(arg_sets)))
         deploy_with_args(*arg_set, debug=debug)
