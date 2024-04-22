@@ -3,16 +3,25 @@ import numpy as np
 import time
 import random
 
-def count_lines_of_command_output(command):
+def count_lines_of_command_output():
     try:
+        squeue_command = "squeue -u \"`echo $USER`\""
+        cancel_command = "scancel -u \"`echo $USER`\""
         # Execute the command and capture its output
-        result = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        result = subprocess.run(squeue_command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
         # Count the number of lines in the output
         output_lines = result.stdout.strip().split('\n')
-        line_count = len(output_lines)
         
-        return line_count
+        failed_output_lines = [ol for ol in output_lines if "launch failed requeued held" in ol]
+        print("Squeue returned {} lines".format(str(len(output_lines)-2)))
+        print("{} of them were failed".format(str(len(failed_output_lines)-2)))
+        if(len(failed_output_lines)==(len(output_lines)-2) and len(output_lines)-2 > 0):
+            print("Executing scancel")
+            _ = subprocess.run(cancel_command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        return len(output_lines)-2
+    
     except subprocess.CalledProcessError as e:
         print(f"Error executing command: {e}")
         return 0
@@ -39,17 +48,17 @@ if __name__ == "__main__":
         arg_sets.append((int(n)-1, int(n), 0))
 
     for i, arg_set in enumerate(arg_sets):
-        queue_size = count_lines_of_command_output("squeue -u \"`echo $USER`\"")-2
+        queue_size = count_lines_of_command_output()
 
         while(queue_size>0):
             print("Queue size: "+str(queue_size))
             if(not debug):
-                queue_size = count_lines_of_command_output("squeue -u \"`echo $USER`\"")-2
+                queue_size = count_lines_of_command_output()
                 time.sleep(5)
         
         print("deploying {}/{}".format(i, len(arg_sets)))
         deploy_with_args(*arg_set, debug=debug)
-        time.sleep(10)
+        time.sleep(30)
         
     
     
