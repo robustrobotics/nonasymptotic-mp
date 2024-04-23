@@ -1,7 +1,7 @@
 import subprocess
-import numpy as np
 import time
 import random
+import os
 
 def count_lines_of_command_output():
     try:
@@ -13,7 +13,7 @@ def count_lines_of_command_output():
         # Count the number of lines in the output
         output_lines = result.stdout.strip().split('\n')
         
-        failed_output_lines = [ol for ol in output_lines if "launch failed requeued held" in ol]
+        failed_output_lines = [ol for ol in output_lines if "held" in ol.lower()]
         print("Squeue returned {} lines".format(str(len(output_lines)-1)))
         print("{} of them were failed".format(str(len(failed_output_lines))))
         if(len(failed_output_lines)==(len(output_lines)-1) and len(output_lines)-1 > 0):
@@ -48,6 +48,8 @@ if __name__ == "__main__":
         arg_sets.append((int(n)-1, int(n), 0))
 
     for i, arg_set in enumerate(arg_sets):
+        assert os.path.isfile("./tmux_lock.txt")
+
         queue_size = count_lines_of_command_output()
 
         while(queue_size>0):
