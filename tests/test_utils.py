@@ -1,4 +1,4 @@
-from random import random_point_in_mpolygon
+from sampler import random_point_in_mpolygon
 from bound import compute_rho, compute_sauer_shelah_bound, compute_numerical_bound
 
 from shapely.geometry import Polygon, MultiPolygon, MultiLineString, MultiPoint
