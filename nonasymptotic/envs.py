@@ -1,4 +1,4 @@
-from random import random_point_in_mpolygon
+from sampler import random_point_in_mpolygon
 from shapely import unary_union, LineString, difference
 from shapely.geometry import Point, Polygon
 from shapely.ops import nearest_points
