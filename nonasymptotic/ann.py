@@ -15,7 +15,7 @@ except ImportError:
 else:
     KGRAPH_AVAILABLE = True
 
-TEMP_DIR = os.path.join(Path(__file__).parent, 'temp')
+TEMP_DIR = os.path.join(Path(__file__).parent.parent, 'temp')
 
 
 # thinks PRMs need from the ANN
@@ -54,7 +54,7 @@ class KGraphANN(ApproximateNearestNeighbor):
         self.embedded_data[:, :given_dim] = data
 
         nn_index = kgraph.KGraph(self.embedded_data, 'euclidean')
-        nn_index.build(reverse=0, K=self.k_neighbors, L=self.k_neighbors + 50, S=30, seed=self.seed)
+        nn_index.build(reverse=0, K=self.k_neighbors, L=self.k_neighbors + 50, S=30)
 
         # save, since we only want the graph (not to use as an index)
         self.save_txt_path = str(os.path.join(TEMP_DIR, str(uuid.uuid4()) + '.txt'))
@@ -75,7 +75,9 @@ class KGraphANN(ApproximateNearestNeighbor):
             edge_list.append(nns_ids_and_dists[1::2])
             dist_list.append(nns_ids_and_dists[2::2])
 
-        return edge_list, dist_list
+        # for numerical stability, kgraph computes distances in half \ell_2 squared.
+        # so we undo that to convert.
+        return np.array(edge_list, dtype='int'), np.sqrt(np.array(dist_list, dtype='float32') * 2)
 
     def update_graph_with_data(self, fresh_data) -> (np.ndarray, np.ndarray):
         if self.k_neighbors is None:
@@ -93,15 +95,12 @@ class KGraphANN(ApproximateNearestNeighbor):
 
 class PyNNDescentANN(ApproximateNearestNeighbor):
     def __init__(self):
-        self.k_neighbors = None
         self.nn_index = None  # PyNN does provide an update interface,
-        self.seed = None
 
     def new_graph_from_data(self, data, k_neighbors, seed=1998, verbose=True) -> (np.ndarray, np.ndarray):
-        self.seed = seed
         self.nn_index = pynn.NNDescent(
             data,
-            n_neighbors=self.k_neighbors,
+            n_neighbors=k_neighbors,
             random_state=seed,
             diversify_prob=0.0,  # no pruning
             pruning_degree_multiplier=1.0,  # node degrees stay the same
@@ -138,3 +137,20 @@ def get_ann(name="pynndescent") -> ApproximateNearestNeighbor:
             return PyNNDescentANN()
     else:
         raise NotImplementedError("Do not have ANN library called: {}".format(name))
+
+
+if __name__ == '__main__':
+    rng = np.random.default_rng()
+    _data = rng.uniform(size=(1000, 5)).astype('float32')
+    # _ann_p = get_ann("pynndescent")
+    # el, dl = _ann_p.new_graph_from_data(_data, 32)
+    # print(el)
+    # print(dl)
+    #
+    _ann_k = get_ann("kgraph")
+    el, dl = _ann_k.new_graph_from_data(_data, 32)
+    print(el)
+    print(dl[2])
+
+    hi = np.linalg.norm(_data[el[2]] - _data[2], axis=1)
+    print(hi - dl[2])
