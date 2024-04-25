@@ -47,11 +47,11 @@ class KGraphANN(ApproximateNearestNeighbor):
     def new_graph_from_data(self, data, k_neighbors) -> (np.ndarray, np.ndarray):
         self.k_neighbors = k_neighbors
 
-        # kgraph only accepts data in dimensions of multiples of four
+        # kgraph only accepts data in dimensions of multiples of four, and is optimized for float32
         given_dim = data.shape[1]
         embedded_dim = np.ceil(given_dim / 4).astype(int) * 4
         self.embedded_data = np.zeros((data.shape[0], embedded_dim))
-        self.embedded_data[:, :given_dim] = data
+        self.embedded_data[:, :given_dim] = data.astype('float32')
 
         nn_index = kgraph.KGraph(self.embedded_data, 'euclidean')
         nn_index.build(reverse=0, K=self.k_neighbors, L=self.k_neighbors + 50, S=30)

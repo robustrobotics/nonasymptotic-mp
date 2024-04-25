@@ -259,7 +259,7 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
 
         # build the master graph
         ann_builder = get_ann(name="kgraph")  # will default to pynndescent if not available
-        edges, dists = ann_builder.new_graph_from_data(self._samples, effective_k, seed=self.rng_seed)
+        edges, dists = ann_builder.new_graph_from_data(self._samples, effective_k)
         master_graph = self._nn_edge_list_and_dist_list_to_nk_prm_graph(edges, dists)
         master_graph.indexEdges()
 
