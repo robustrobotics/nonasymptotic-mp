@@ -1,8 +1,8 @@
+from nonasymptotic.ann import get_ann
 from networkit.graphtools import GraphTools
 from abc import ABC, abstractmethod
 
 import numpy as np
-import pynndescent as pynn
 import networkit as nk
 import uuid
 import os
@@ -256,15 +256,10 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
         # if we are growing the graph, it means that a previous check with a larger radius worked.
         # so know the PRM is complete for a larger radius, so we can lose NNs losslessly.
         effective_k = min(n_samples - 1, self.k_neighbors)
-        nn_index = pynn.NNDescent(self._samples,
-                                  n_neighbors=effective_k,
-                                  random_state=self.rng_seed,
-                                  diversify_prob=0.0,
-                                  pruning_degree_multiplier=1.0,
-                                  verbose=self.verbose)
 
         # build the master graph
-        edges, dists = nn_index.neighbor_graph
+        ann_builder = get_ann(name="kgraph")  # will default to pynndescent if not available
+        edges, dists = ann_builder.new_graph_from_data(self._samples, effective_k, seed=self.rng_seed)
         master_graph = self._nn_edge_list_and_dist_list_to_nk_prm_graph(edges, dists)
         master_graph.indexEdges()
 
@@ -362,7 +357,7 @@ class SimpleRadiusPRM(SimplePRM):
 
         self.dist_points_to_path = sdf_to_path
 
-        self.nn_index = None
+        self.ann = None
         self.g_sp_lookup = None
         self.sample_to_lookup_ind = None
 
@@ -376,21 +371,16 @@ class SimpleRadiusPRM(SimplePRM):
     def grow_to_n_samples(self, n_samples):
 
         def _build_threshold_index(samples):
+            ann_builder = get_ann("kgraph")
             while True:
-                nn_index = pynn.NNDescent(samples,
-                                          n_neighbors=self.k_neighbors,
-                                          random_state=self.rng_seed,
-                                          diversify_prob=0.0,  # prune no edges, since we're not searching.
-                                          pruning_degree_multiplier=1.0,  # keep node degree same as n_neighbor
-                                          verbose=self.verbose)  # Euclidean metric is default
-                _, index_dists = nn_index.neighbor_graph
+                edge_lists, dists = ann_builder.new_graph_from_data(samples, self.k_neighbors)
 
                 if (self.k_neighbors >= self.max_k_neighbors
                         or self.k_neighbors >= n_samples
-                        or np.all(index_dists[:, -1] >= self.conn_r)):
+                        or np.all(dists[:, -1] >= self.conn_r)):
                     if self.verbose:
                         print('Using %i neighbors for graph.' % self.k_neighbors)
-                    return nn_index
+                    return edge_lists, dists, ann_builder
 
                 self.k_neighbors *= 2
 
@@ -402,11 +392,10 @@ class SimpleRadiusPRM(SimplePRM):
                 self._samples[i, :] = self.sample_state()
 
             # apply a doubling scheme for connection neighbors to obtain the threshold graph
-            self.nn_index = _build_threshold_index(self._samples)
-            adj_arr, dists_arr = self.nn_index.neighbor_graph
+            adj_arr, dists_arr, self.ann = _build_threshold_index(self._samples)
             self._g_prm = self._nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr)
 
-        else:  # otherwise, we reuse past computation
+        else:  # otherwise, we (try to) reuse past computation
             past_n_samples = self._samples.shape[0]
             m_new_samples = n_samples - past_n_samples
             new_samples = np.zeros((m_new_samples, self.d))
@@ -414,12 +403,11 @@ class SimpleRadiusPRM(SimplePRM):
             for i in range(m_new_samples):
                 new_samples[i, :] = self.sample_state()
 
-            self.nn_index.update(xs_fresh=new_samples)
             self._samples = np.concatenate([self._samples, new_samples])
+            adj_arr, dists_arr = self.ann.update_graph_with_data(new_samples)
 
             # check to make sure we are still within threshold. if not, we need to build a new graph with
             # new neighbors
-            adj_arr, dists_arr = self.nn_index.neighbor_graph
             if np.all(dists_arr[:, -1] > self.conn_r) or self.k_neighbors >= self.max_k_neighbors:
                 self.prm_graph.addNodes(m_new_samples)
                 g_new_conns = self._nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr,
@@ -429,8 +417,7 @@ class SimpleRadiusPRM(SimplePRM):
 
             else:
                 self.k_neighbors *= 2  # a bit hacky, but a way to make sure we don't recompute the graph at the same K
-                self.nn_index = _build_threshold_index(self.prm_samples)
-                adj_arr, dists_arr = self.nn_index.neighbor_graph
+                adj_arr, dists_arr = self.ann.new_graph_from_data(self.prm_samples, self.k_neighbors)
                 self._g_prm = self._nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr,
                                                                                threshold_rad=self.conn_r)
 
@@ -461,7 +448,7 @@ class SimpleRadiusPRM(SimplePRM):
     def reset(self):
         self._g_prm = None
         self._samples = None
-        self.nn_index = None
+        self.ann = None
 
     @property
     def prm_graph(self) -> nk.Graph:
