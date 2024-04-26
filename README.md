@@ -14,10 +14,10 @@ pip install -r requirements.txt
 in the main project directory.
 
 The minimal installation uses [pynndescent](https://pynndescent.readthedocs.io/en/latest/index.html) to construct
-an approximate K-nearest neighbors graph (that forms the PRM), which is slow when points grow larger
+an approximate K-nearest neighbors graph (that forms the PRM), which is slow when input set of points grow larger
 than ~1e5.
 
-You can optionally install [kgraph](https://github.com/aaalgo/kgraph) a much faster ANN library, which has a component
+You can optionally install [kgraph](https://github.com/aaalgo/kgraph) (a much faster ANN library), which has a component
 that must be built from source. 
 The dependencies require a modern installation of `cmake`, `g++`, and `BOOST`. The installation _should_ be 
 straightforward (the one included on the github repo).
