@@ -8,10 +8,14 @@ def compute_vol_unit_sphere(_dim):
     return np.pi ** (_dim / 2) / scipy.special.gamma(_dim / 2 + 1)
 
 
-def compute_rho(delta, epsilon, dim, vol_env):
+def compute_epsilon_net_radius(clearance, tol):
+    alpha = tol / np.sqrt(1 + tol ** 2) if tol is not None else 1.0
+    return alpha * clearance
+
+
+def compute_rho(clearance, tol, dim, vol_env):
     measures_unit_sphere = compute_vol_unit_sphere(dim) / vol_env
-    alpha = epsilon / np.sqrt(1 + epsilon ** 2) if epsilon is not None else 1.0
-    return measures_unit_sphere * (alpha * delta) ** dim
+    return measures_unit_sphere * (compute_epsilon_net_radius(clearance, tol) ** dim)
 
 
 def compute_sauer_shelah_bound(m_samples, rho, vc_dim):
@@ -69,7 +73,6 @@ def compute_numerical_bound(clearance, success_prob, coll_free_volume, dim, tol)
     if success_prob <= 0.0 or success_prob >= 1.0:
         raise ArithmeticError("Success probability must be between 0.0 and 1.0, noninclusive.")
 
-    failure_prob = 1.0 - success_prob
     alpha = tol / np.sqrt(1 + tol ** 2) if tol is not None else 1.0
 
     conn_r = 2 * (alpha + np.sqrt(1 - alpha ** 2)) * clearance
@@ -81,3 +84,7 @@ def compute_numerical_bound(clearance, success_prob, coll_free_volume, dim, tol)
     # we stop if the probability is #1 decaying, and #2 we've exceeded desired probability
 
     return doubling_search_over_sauer_shelah(rho, vc_dim, success_prob), conn_r
+
+
+def compute_connection_radius(clearance, tol):
+    return 2 * clearance * (tol + 1) / np.sqrt(1 + tol ** 2)

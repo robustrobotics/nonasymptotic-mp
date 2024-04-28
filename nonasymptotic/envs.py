@@ -45,6 +45,11 @@ class Environment(ABC):
     def distance_to_path(self, query_points):
         pass
 
+    @property
+    @abstractmethod
+    def volume(self):
+        pass
+
 
 class StraightLine(Environment):
     """
@@ -353,6 +358,11 @@ class StraightLine(Environment):
                     plt.show()
                 return False, 'timed out'
 
+    @property
+    def volume(self):
+        box_lengths = np.abs(self.bounds_upper - self.bounds_lower)
+        return np.prod(box_lengths)
+
 
 class GrayCodeWalls(Environment):
     def __init__(self, dim, length, thickness=0.0, seed=None):
@@ -622,6 +632,10 @@ class GrayCodeWalls(Environment):
 
         # translate to global coordinates and then return
         return region_sample + np.array(cuboid_coords) + 0.5
+
+    @property
+    def volume(self):
+        raise NotImplementedError('We have not done this computation yet!')
 
     @staticmethod
     def _unblock_wall(cube_coords, neighbor_coords, walls_low, walls_high):
