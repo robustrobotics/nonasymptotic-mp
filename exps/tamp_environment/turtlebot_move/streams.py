@@ -103,6 +103,9 @@ class BagOfBoundingBoxes(Environment):
     def distance_to_path(self, points):
         return np.zeros((points.shape[0], ))
 
+    @property
+    def volume(self):
+        raise NotImplementedError
     
 
 def get_ik(problem):
