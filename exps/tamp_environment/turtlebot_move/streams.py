@@ -16,7 +16,7 @@ from tqdm import tqdm
 import itertools
 import random
 import copy
-from nonasymptotic.util import compute_numerical_bound
+from nonasymptotic.bound import compute_numerical_bound
 
 VIS_RANGE = 2
 COM_RANGE = 2*VIS_RANGE

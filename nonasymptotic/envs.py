@@ -1,6 +1,5 @@
-from sampler import random_point_in_mpolygon
-from nonasymptotic.separating_axis import separating_axis_theorem
-from shapely import unary_union, LineString, difference
+from nonasymptotic.sampler import random_point_in_mpolygon
+from shapely import unary_union, difference
 from shapely.geometry import Point, Polygon
 from shapely.ops import nearest_points
 from shapely.plotting import plot_polygon, plot_points
