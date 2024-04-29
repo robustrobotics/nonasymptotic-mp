@@ -72,8 +72,8 @@ class KGraphANN(ApproximateNearestNeighbor):
         dist_list = []
         for line in lines[1:]:
             nns_ids_and_dists = line.split()
-            edge_list.append(nns_ids_and_dists[1::2])
-            dist_list.append(nns_ids_and_dists[2::2])
+            edge_list.append(nns_ids_and_dists[1::2][:self.k_neighbors])
+            dist_list.append(nns_ids_and_dists[2::2][:self.k_neighbors])
 
         # for numerical stability, kgraph computes distances in half \ell_2 squared.
         # so we undo that to convert.
