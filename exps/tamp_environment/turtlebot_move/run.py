@@ -171,7 +171,7 @@ def main():
     parser.add_argument('--min-samples', default=10, type=int, help='Max num samples for motion planning')
     parser.add_argument('--max-samples', default=2000, type=int, help='Max num samples for motion planning')
     parser.add_argument('--factor', default=1.2, type=int, help='The rate at which we geometrically expand from min-samples to max-samples')
-    parser.add_argument('--delta', default=0.075, type=float, help='Difference between the hallway width and the largest object that needs to fit thorugh the hallway')
+    parser.add_argument('--delta', default=0.05, type=float, help='Difference between the hallway width and the largest object that needs to fit thorugh the hallway')
     parser.add_argument('--seed', default=-1, type=int, help='Seed for selection of robot size and collision placement')
     parser.add_argument('--save-dir', default="./logs/debug", type=str, help='Directory to save planning results')
     parser.add_argument('--vis', action='store_true', help='GUI during planning')

@@ -82,6 +82,7 @@ def sample_placement(top_body, bottom_body, bottom_link=None, **kwargs):
     bottom_aabb = get_aabb(bottom_body, link=bottom_link, **kwargs)
     return sample_placement_on_aabb(top_body, bottom_aabb, **kwargs)
 
+
 def sample_placements(body_surfaces, obstacles=None, min_distances={}):
     if obstacles is None:
         obstacles = [body for body in get_bodies() if body not in body_surfaces]
