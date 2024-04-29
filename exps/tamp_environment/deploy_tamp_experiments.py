@@ -52,7 +52,7 @@ if __name__ == "__main__":
 
         queue_size = count_lines_of_command_output()
 
-        while(queue_size>0):
+        while(queue_size>99):
             print("Queue size: "+str(queue_size))
             if(not debug):
                 queue_size = count_lines_of_command_output()
