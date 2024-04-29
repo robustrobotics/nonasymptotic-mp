@@ -1,5 +1,5 @@
-from sampler import random_point_in_mpolygon
-from shapely import unary_union, LineString, difference
+from nonasymptotic.sampler import random_point_in_mpolygon
+from shapely import unary_union, difference
 from shapely.geometry import Point, Polygon
 from shapely.ops import nearest_points
 from shapely.plotting import plot_polygon, plot_points
@@ -15,6 +15,8 @@ import time
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+from typing import Tuple, List
+from dataclasses import dataclass
 
 
 # NOTE: apply new knowledge about shapely operators to try to vectorize geom calculations
@@ -44,7 +46,7 @@ class Environment(ABC):
     @abstractmethod
     def distance_to_path(self, query_points):
         pass
-
+      
     @property
     @abstractmethod
     def volume(self):
