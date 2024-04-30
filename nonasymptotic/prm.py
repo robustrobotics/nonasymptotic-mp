@@ -14,7 +14,7 @@ import os
 # create abstract properties that need to be implemented as the standard names of things
 
 class SimplePRM(ABC):
-    def __init__(self, motion_validity_checker, valid_state_sampler, seed, verbose):
+    def __init__(self, motion_validity_checker, valid_state_sampler, seed, verbose, in_mp_exp_mode=False):
         self.check_motion = motion_validity_checker
         self.sample_state = valid_state_sampler
 
@@ -28,6 +28,8 @@ class SimplePRM(ABC):
             os.path.dirname(os.path.realpath(__file__)),
             '../temp/'
         )
+
+        self.in_mp_exp_mode = in_mp_exp_mode
 
     @abstractmethod
     def grow_to_n_samples(self, n_samples):
@@ -274,10 +276,11 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
             print("Certified maximal correct connection radius: %f" % self.certified_max_conn_r)
 
         # NOT true Knn from points on line, but not important for us
-        n_samples = self._samples.shape[0]
-        dist_samples_to_line = self.dist_points_to_path(self._samples)
-        samples_within_conn_r = np.arange(n_samples)[dist_samples_to_line <= self.certified_max_conn_r]
-        self.g_sp_lookup, self.sample_to_lookup_ind = self._compute_spsp(samples_within_conn_r)
+        if self.in_mp_exp_mode:
+            n_samples = self._samples.shape[0]
+            dist_samples_to_line = self.dist_points_to_path(self._samples)
+            samples_within_conn_r = np.arange(n_samples)[dist_samples_to_line <= self.certified_max_conn_r]
+            self.g_sp_lookup, self.sample_to_lookup_ind = self._compute_spsp(samples_within_conn_r)
 
         # set the new connection radius
         self.set_connection_radius(self.certified_max_conn_r)
@@ -339,6 +342,9 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
         return ids_within_conn_r[valid_motions], dists_from_query[within_conn_r][valid_motions]
 
     def _distance_in_graph(self, starts, goals):
+        if not self.in_mp_exp_mode:
+            raise NotImplementedError('Cannot compute distance when in_mp_exp_mode is False.')
+
         return self.g_sp_lookup[
             self.sample_to_lookup_ind[starts],
             self.sample_to_lookup_ind[goals]
@@ -421,10 +427,11 @@ class SimpleRadiusPRM(SimplePRM):
                 self._g_prm = self._nn_edge_list_and_dist_list_to_nk_prm_graph(adj_arr, dists_arr,
                                                                                threshold_rad=self.conn_r)
 
-        n_samples = self._samples.shape[0]
-        dist_samples_to_line = self.dist_points_to_path(self._samples)
-        samples_within_conn_r = np.arange(n_samples)[dist_samples_to_line <= self.conn_r]
-        self.g_sp_lookup, self.sample_to_lookup_ind = self._compute_spsp(samples_within_conn_r)
+        if self.in_mp_exp_mode:
+            n_samples = self._samples.shape[0]
+            dist_samples_to_line = self.dist_points_to_path(self._samples)
+            samples_within_conn_r = np.arange(n_samples)[dist_samples_to_line <= self.conn_r]
+            self.g_sp_lookup, self.sample_to_lookup_ind = self._compute_spsp(samples_within_conn_r)
 
     def _query_samples(self, query):
         # Brute force search on and validity check. We're avoiding the PRM index now.
@@ -440,6 +447,10 @@ class SimpleRadiusPRM(SimplePRM):
         return ids_within_conn_r[valid_motions], dists_from_query[within_conn_r][valid_motions]
 
     def _distance_in_graph(self, starts, goals):
+
+        if not self.in_mp_exp_mode:
+            raise NotImplementedError('Cannot compute distance when in_mp_exp_mode is False.')
+
         return self.g_sp_lookup[
             self.sample_to_lookup_ind[starts],
             self.sample_to_lookup_ind[goals]
