@@ -2,6 +2,7 @@ import sys
 
 import numpy as np
 import scipy
+from decimal import Decimal
 
 
 def compute_vol_unit_sphere(_dim):
@@ -19,14 +20,30 @@ def compute_rho(clearance, tol, dim, vol_env):
 
 
 def compute_sauer_shelah_bound(m_samples, rho, vc_dim):
-    ss_comb_sum = np.sum(scipy.special.comb(2 * m_samples, np.arange(vc_dim + 1)))
-    decay_rate = 2 * np.exp2(-rho * m_samples / 2)
+    # switched to exact computation so scipy can handle big integers,
+    # but the function can no longer be vectorized :(
 
-    return ss_comb_sum * decay_rate
+    ss_comb_sum = np.sum([scipy.special.comb(2 * m_samples, _d, exact=True) for _d in range(vc_dim + 1)])
+
+    try:
+        decay_rate = 2 * np.exp2(-rho * m_samples / 2)
+    except OverflowError:
+        if isinstance(m_samples, np.int64):
+            m_samples = m_samples.item()
+        decay_rate = 2 * np.exp2(float(Decimal(-rho) * Decimal(m_samples)) / 2)
+
+    try:
+        return ss_comb_sum * decay_rate
+    except OverflowError:
+        if isinstance(ss_comb_sum, np.int64):
+            ss_comb_sum = ss_comb_sum.item()
+
+        return float(Decimal(ss_comb_sum) * Decimal(decay_rate))
 
 
 def doubling_search_over_sauer_shelah(rho, vc_dim, success_prob):
-    # we're exploiting the monotonicity of the increase/decrease behavior of the probability bound.
+    # we're exploiting the monotonicity of the increase/decrease behavior of
+    # the probability bound.
     failure_prob = 1 - success_prob
 
     m_samples_lb = 1
@@ -34,13 +51,14 @@ def doubling_search_over_sauer_shelah(rho, vc_dim, success_prob):
     while True:
         cand_gamma = compute_sauer_shelah_bound(m_samples_ub, rho, vc_dim)
         next_gamma = compute_sauer_shelah_bound(m_samples_ub + 1, rho, vc_dim)
-        if failure_prob >= cand_gamma > next_gamma:
+
+        # move past the desired probability and ensure we are 'downhill'
+        if failure_prob >= cand_gamma >= next_gamma:
             break
 
-        m_samples_lb = m_samples_ub
         m_samples_ub *= 2
 
-        if m_samples_ub > sys.maxsize:
+        if m_samples_ub > 1e300:
             raise OverflowError("Reached sample threshold for useful computation.")
 
     # next, binary search down to the right number of samples.
@@ -53,9 +71,14 @@ def doubling_search_over_sauer_shelah(rho, vc_dim, success_prob):
         test_samples = int((m_samples_lb + m_samples_ub) / 2)
         # test if the tester is the sample count we're looking for
         cand_gamma = compute_sauer_shelah_bound(test_samples, rho, vc_dim)
+        next_gamma = compute_sauer_shelah_bound(test_samples + 1, rho, vc_dim)
 
-        if cand_gamma > failure_prob:
+        # if the candidate failure probability is still too high, or
+        # if we're now going 'downhill' yet, then move up the lower bound.
+        if cand_gamma > failure_prob or next_gamma > cand_gamma:
             m_samples_lb = test_samples
+
+        # otherwise, move down the upper bound
         else:
             m_samples_ub = test_samples
 
