@@ -61,7 +61,3 @@ if __name__ == "__main__":
         print("deploying {}/{}".format(i, len(arg_sets)))
         deploy_with_args(*arg_set, debug=debug)
         time.sleep(30)
-        
-    
-    
-    
