@@ -68,7 +68,7 @@ def straight_line_trial(delta_clear, dim, rng_seed,
     # run along sample schedule. Once we are ed-complete, we always will be, so we skip the rest when we are.\
     for n_samples in sample_schedule:
         print('Growing prm to %i samples...' % n_samples)
-        start_t = time.process_time()
+        start_t = time.time()
 
         # build prm and set up rad search array
         eff_radius_ub, nn_rads = prm.grow_to_n_samples(n_samples)  # nn_rads is ordered ascending
@@ -76,14 +76,14 @@ def straight_line_trial(delta_clear, dim, rng_seed,
         i_rad_lb = 1
         i_rad_ub = nn_rads.size - 1
 
-        end_t = time.process_time()
+        end_t = time.time()
         build_runtimes.append(end_t - start_t)
 
         print('build time: %f' % build_runtimes[-1])
         print('Initiating ed checks...')
 
         # binary search down to radius
-        start_t = time.process_time()
+        start_t = time.time()
         info = ''
         while True:
             if i_rad_lb + 1 == i_rad_ub:
@@ -113,7 +113,7 @@ def straight_line_trial(delta_clear, dim, rng_seed,
             else:
                 i_rad_lb = i_rad_test
 
-        end_t = time.process_time()
+        end_t = time.time()
         check_runtimes.append(end_t - start_t)
 
         print('check time: %f' % check_runtimes[-1])
@@ -177,7 +177,7 @@ else:
     all_tasks_record_df = None
 
 for _dim, _trial in tasks:
-    print('initiating dim: %f, trial%f' % (_dim, _trial))
+    print('initiating line trial dim: %f, trial%f' % (_dim, _trial))
     trial_record_df = straight_line_trial(
         config['delta'], _dim,
         rng_seed=rng.integers(0, 2 ** 32),

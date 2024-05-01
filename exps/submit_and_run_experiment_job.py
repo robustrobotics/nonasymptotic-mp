@@ -1,6 +1,7 @@
 """
 Sets up experiment directory, generates the necessary shell scripts, and then submits the job.
 We assume that this script is being run from nonasymptotic-mp/exps/ directory.
+TODO: (with available time... lift out supercloud boilerplate for use with other projects)
 """
 from datetime import datetime
 import argparse
@@ -20,10 +21,12 @@ echo "My task ID: " $LLSUB_RANK
 echo "Number of Tasks: " $LLSUB_SIZE
 export PYTHONPATH=$PYTHONPATH:$PWD/../
 
-python -u run_straight_line_trial.py $LLSUB_RANK $LLSUB_SIZE {0} {1}"""
+python -u {script_name} $LLSUB_RANK $LLSUB_SIZE {arg0} {arg1}"""
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument('--type', type=str, required=True, options=['line', 'knn'],
+                        help='Type of experiment to run')
     parser.add_argument("--name", type=str, required=True,
                         help="Name of the experiment.")
     parser.add_argument("--config-path", type=str, required=True,
@@ -69,7 +72,9 @@ if __name__ == "__main__":
             print("Could not find the config file '%s'." % args.config_path)
 
         # generate the submission script (and store in experiment directory)
-        submit_script_text = submit_sh_script_prototype_text.format(config_path, save_path)
+        script_name = 'run_straight_line_trial.py' if args.type == 'line' else 'run_knn_radius_trial.py'
+        submit_script_text = submit_sh_script_prototype_text.format(script_name=script_name,
+                                                                    arg0=config_path, arg1=save_path)
         submit_script_path = os.path.join(save_path, 'submit_job.sh')
         with open(submit_script_path, 'w') as submit_script_file:
             submit_script_file.write(submit_script_text)

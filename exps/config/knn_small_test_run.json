@@ -1,0 +1,7 @@
+{
+  "delta": 0.5,
+  "dims_to_test": [2, 3],
+  "sample_schedule": [10, 100, 1000],
+  "neighbor_schedule": [32, 64, 128],
+  "n_trials": 5
+}
