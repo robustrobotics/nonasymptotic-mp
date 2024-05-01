@@ -307,11 +307,12 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
 
         self.conn_r = new_conn_r
 
-        # recompute shortest paths over new graph and store their distances
-        n_samples = self._samples.shape[0]
-        dist_samples_to_line = self.dist_points_to_path(self._samples)
-        samples_within_conn_r = np.arange(n_samples)[dist_samples_to_line <= self.conn_r]
-        self.g_sp_lookup, self.sample_to_lookup_ind = self._compute_spsp(samples_within_conn_r)
+        if self.in_mp_exp_mode:
+            # recompute shortest paths over new graph and store their distances
+            n_samples = self._samples.shape[0]
+            dist_samples_to_line = self.dist_points_to_path(self._samples)
+            samples_within_conn_r = np.arange(n_samples)[dist_samples_to_line <= self.conn_r]
+            self.g_sp_lookup, self.sample_to_lookup_ind = self._compute_spsp(samples_within_conn_r)
 
     def reset(self):
         self.conn_r = None
