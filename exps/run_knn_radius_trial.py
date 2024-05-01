@@ -44,7 +44,7 @@ def knn_radius_trial(delta_clear, dim, sample_schedule, neighbor_schedule, rng_s
             "delta_clearance", "seed"
         ])
 
-        return df_record
+    return df_record
 
 
 # ==== TASK SCHEDULING CODE VVVV =======================================

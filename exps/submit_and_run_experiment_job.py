@@ -25,7 +25,7 @@ python -u {script_name} $LLSUB_RANK $LLSUB_SIZE {arg0} {arg1}"""
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--type', type=str, required=True, options=['line', 'knn'],
+    parser.add_argument('--type', type=str, required=True, choices=['line', 'knn'],
                         help='Type of experiment to run')
     parser.add_argument("--name", type=str, required=True,
                         help="Name of the experiment.")
