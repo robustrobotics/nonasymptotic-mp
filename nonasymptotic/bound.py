@@ -1,5 +1,6 @@
 import sys
 
+import math
 import numpy as np
 import scipy
 from decimal import Decimal
@@ -25,20 +26,11 @@ def compute_sauer_shelah_bound(m_samples, rho, vc_dim):
 
     ss_comb_sum = np.sum([scipy.special.comb(2 * m_samples, _d, exact=True) for _d in range(vc_dim + 1)])
 
-    try:
-        decay_rate = 2 * np.exp2(-rho * m_samples / 2)
-    except OverflowError:
-        if isinstance(m_samples, np.int64):
-            m_samples = m_samples.item()
-        decay_rate = 2 * np.exp2(float(Decimal(-rho) * Decimal(m_samples)) / 2)
+    # to dodge some numerical imprecision of the exponentiation, let's do the calculation
+    #   in 2-logspace. math.log2 doesn't convert to float (unlike numpy), so we use that here.
 
-    try:
-        return ss_comb_sum * decay_rate
-    except OverflowError:
-        if isinstance(ss_comb_sum, np.int64):
-            ss_comb_sum = ss_comb_sum.item()
-
-        return float(Decimal(ss_comb_sum) * Decimal(decay_rate))
+    log2_prob = math.log2(ss_comb_sum) + (-rho * m_samples / 2) + 1
+    return 2 ** log2_prob
 
 
 def doubling_search_over_sauer_shelah(rho, vc_dim, success_prob):
