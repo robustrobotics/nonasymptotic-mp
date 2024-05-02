@@ -3,6 +3,9 @@ import time
 import random
 import os
 
+MAX_TOTAL = 200
+NUM_RUNS_PER = 50
+
 def count_lines_of_command_output():
     try:
         squeue_command = "squeue -u \"`echo $USER`\""
@@ -27,7 +30,7 @@ def count_lines_of_command_output():
         return 0
     
 def deploy_with_args(min_samples, max_samples, adaptive, debug=False):
-    command_str = f"sbatch --array=1-100 deploy_experiments.sh {min_samples} {max_samples} {adaptive}"
+    command_str = f"sbatch --array=1-{NUM_RUNS_PER} deploy_experiments.sh {min_samples} {max_samples} {adaptive}"
     if(not debug):
         subprocess.run(command_str, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     else:
@@ -52,7 +55,7 @@ if __name__ == "__main__":
 
         queue_size = count_lines_of_command_output()
 
-        while(queue_size>49):
+        while(queue_size>(MAX_TOTAL-NUM_RUNS_PER)-1):
             print("Queue size: "+str(queue_size))
             if(not debug):
                 queue_size = count_lines_of_command_output()
@@ -60,4 +63,4 @@ if __name__ == "__main__":
         
         print("deploying {}/{}".format(i, len(arg_sets)))
         deploy_with_args(*arg_set, debug=debug)
-        time.sleep(30)
+        time.sleep(60*3)
