@@ -3,7 +3,7 @@ import time
 import random
 import os
 
-MAX_TOTAL = 200
+MAX_TOTAL = 100
 NUM_RUNS_PER = 50
 
 def count_lines_of_command_output():
