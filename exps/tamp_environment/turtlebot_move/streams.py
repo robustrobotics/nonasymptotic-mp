@@ -145,7 +145,7 @@ def get_anytime_motion_fn(problem,
         if(adaptive_n):
             delta = problem.hallway_gap-(robot_shape.upper[0]-robot_shape.lower[0])
             print("[Inside MP] delta: "+str(delta))
-            max_samples, _ = compute_numerical_bound(delta, 0.9, 4, 2, None)
+            max_samples, _ = compute_numerical_bound(delta, 0.99, 5, 2, None)
             min_samples = max_samples-1
         else:
             min_samples=start_samples
