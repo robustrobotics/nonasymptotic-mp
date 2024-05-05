@@ -133,7 +133,7 @@ def get_anytime_motion_fn(problem,
         goal = np.array(q2.values[:2])
 
         seed = 0
-        
+        print(get_aabb(rover))
         obstacles = set(problem.obstacles)
         obstacle_oobbs = [get_oobb(obstacle) for obstacle in obstacles]
         if(obj is not None):
@@ -143,9 +143,10 @@ def get_anytime_motion_fn(problem,
             robot_shape:AABB = aabb_from_extent_center(get_aabb_extent(get_aabb(rover)))
             
         if(adaptive_n):
-            delta = problem.hallway_gap-(robot_shape.upper[0]-robot_shape.lower[0])
+            collision_buffer = 0.02
+            delta = problem.hallway_gap - (robot_shape.upper[0] - robot_shape.lower[0]) + collision_buffer
             print("[Inside MP] delta: "+str(delta))
-            max_samples, _ = compute_numerical_bound(delta, 0.99, 5, 2, None)
+            max_samples, _ = compute_numerical_bound(delta, 0.99, 8, 2, None)
             min_samples = max_samples-1
         else:
             min_samples=start_samples
