@@ -17,7 +17,36 @@ from streams import get_cfree_pose_pose_test, \
     get_cfree_obj_approach_pose_test
 import os
 import argparse
+import string
+from collections import namedtuple
+import numpy as np
 
+# DEFAULT_ARM_POS = (-2.74228529839567, -1.1180049615399599, 2.2107771723948684, -1.320262400722078, 0.9131962195838295, 1.1464814897121636, 0.009226410633654493)
+Shape = namedtuple(
+    "Shape", ["link", "index"]
+)
+
+def create_hollow_shapes(indices, width=0.30, length=0.4, height=0.2, thickness=0.01):
+    assert len(indices) == 3
+    dims = [width, length, height]
+    center = [0.0, 0.0, height / 2.0]
+    coordinates = string.ascii_lowercase[-len(dims) :]
+
+    # TODO: no way to programmatically set the name of the geoms or links
+    # TODO: rigid links version of this
+    shapes = []
+    for index, signs in enumerate(indices):
+        link_dims = np.array(dims)
+        link_dims[index] = thickness
+        for sign in sorted(signs):
+            # name = '{:+d}'.format(sign)
+            name = "{}{}".format("-" if sign < 0 else "+", coordinates[index])
+            geom = pbu.get_box_geometry(*link_dims)
+            link_center = np.array(center)
+            link_center[index] += sign * (dims[index] - thickness) / 2.0
+            pose = pbu.Pose(point=link_center)
+            shapes.append((name, geom, pose))
+    return shapes
 
 def get_fixed(robot, movable):
     rigid = [body for body in pbu.get_bodies() if body != robot]
@@ -65,11 +94,7 @@ def pddlstream_from_problem(robot, movable=[], teleport=False, grasp_name='top')
     body = movable[0]
     goal = ('and',
             ('AtConf', conf),
-            #('Holding', body),
-            #('On', body, fixed[1]),
-            #('On', body, fixed[2]),
-            #('Cleaned', body),
-            ('Cooked', body),
+            ('Cleaned', body),
     )
 
     stream_map = {
@@ -88,38 +113,54 @@ def pddlstream_from_problem(robot, movable=[], teleport=False, grasp_name='top')
 
     return PDDLProblem(domain_pddl, constant_map, stream_pddl, stream_map, init, goal)
 
+SHAPE_INDICES = {
+    "tray": [{-1, +1}, {-1, +1}, {-1}],
+    "bin": [{-1, +1}, {-1, +1}, {-1}],
+    "cubby": [{-1}, {-1, +1}, {-1, +1}],
+    "fence": [{-1, +1}, {-1, +1}, {}],
+    "x_walls": [[-1, +1], [], [-1]],
+    "y_walls": [[], [-1, +1], [-1]],
+}
+
+def create_hollow(category, color=pbu.GREY, *args, **kwargs):
+    indices = SHAPE_INDICES[category]
+    shapes = create_hollow_shapes(indices, *args, **kwargs)
+    _, geoms, poses = zip(*shapes)
+    colors = len(shapes) * [color]
+    collision_id, visual_id = pbu.create_shape_array(geoms, poses, colors)
+    body = pbu.create_body(collision_id, visual_id, mass=pbu.STATIC_MASS)
+    return body
 
 
 def load_world():
-    # TODO: store internal world info here to be reloaded
+
+
     pbu.set_default_camera()
     pbu.draw_global_system()
     with pbu.HideOutput():
-        #add_data_path()
-        robot = pbu.load_model(pbu.DRAKE_IIWA_URDF, fixed_base=True) # DRAKE_IIWA_URDF | KUKA_IIWA_URDF
+        robot = pbu.load_model(pbu.DRAKE_IIWA_URDF, fixed_base=True)
+        # pbu.set_joint_positions(robot, pbu.get_movable_joints(robot), DEFAULT_ARM_POS)
         floor = pbu.load_model('models/short_floor.urdf')
-        sink = pbu.load_model(pbu.SINK_URDF, pose=pbu.Pose(pbu.Point(x=-0.5)))
+        # sink = pbu.load_model(pbu.SINK_URDF, pose=pbu.Pose(pbu.Point(x=-0.5)))
         stove = pbu.load_model(pbu.STOVE_URDF, pose=pbu.Pose(pbu.Point(x=+0.5)))
-        celery = pbu.load_model(pbu.BLOCK_URDF, fixed_base=False)
-        radish = pbu.load_model(pbu.SMALL_BLOCK_URDF, fixed_base=False)
-        #cup = load_model('models/dinnerware/cup/cup_small.urdf',
-        # Pose(Point(x=+0.5, y=+0.5, z=0.5)), fixed_base=False)
+        radish = pbu.load_model(pbu.BLOCK_URDF, fixed_base=False)
+        sink = create_hollow("bin")
+        pbu.set_pose(sink, pbu.Pose(pbu.Point(x=-0.5)))
 
-    pbu.draw_pose(pbu.Pose(), parent=robot, parent_link=get_tool_link(robot)) # TODO: not working
-    # dump_body(robot)
-    # wait_for_user()
+    pbu.draw_pose(pbu.Pose(), parent=robot, parent_link=get_tool_link(robot))
+
 
     body_names = {
         sink: 'sink',
         stove: 'stove',
-        celery: 'celery',
         radish: 'radish',
     }
-    movable_bodies = [celery, radish]
+    movable_bodies = [radish]
 
-    pbu.set_pose(celery, pbu.Pose(pbu.Point(y=0.5, z=pbu.stable_z(celery, floor))))
-    pbu.set_pose(radish, pbu.Pose(pbu.Point(y=-0.5, z=pbu.stable_z(radish, floor))))
-
+    fixed = get_fixed(robot, movable_bodies)
+    stable_gen = get_stable_gen(fixed)
+    pose, = next(stable_gen(radish, stove))
+    pbu.set_pose(radish, pose.value)
     return robot, body_names, movable_bodies
 
 def postprocess_plan(plan):
