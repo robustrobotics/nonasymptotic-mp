@@ -18,6 +18,7 @@ from streams import get_cfree_pose_pose_test, \
 import os
 import argparse
 import string
+import itertools
 from collections import namedtuple
 import numpy as np
 
@@ -134,7 +135,6 @@ def create_hollow(category, color=pbu.GREY, *args, **kwargs):
 
 def load_world():
 
-
     pbu.set_default_camera()
     pbu.draw_global_system()
     with pbu.HideOutput():
@@ -144,14 +144,27 @@ def load_world():
         # sink = pbu.load_model(pbu.SINK_URDF, pose=pbu.Pose(pbu.Point(x=-0.5)))
         stove = pbu.load_model(pbu.STOVE_URDF, pose=pbu.Pose(pbu.Point(x=+0.5)))
         radish = pbu.load_model(pbu.BLOCK_URDF, fixed_base=False)
-        sink = create_hollow("bin")
-        pbu.set_pose(sink, pbu.Pose(pbu.Point(x=-0.5)))
+        container_width = 0.3
+        container_length = 0.3
+        grid_size_x = 4
+        grid_size_y = 4
+        bin_grid_x = list(np.linspace(0, container_width, grid_size_x))
+        bin_grid_y = list(np.linspace(0, container_width, grid_size_y))
+        bin_width = container_width/float(grid_size_x)+0.03
+        bin_length = container_length/float(grid_size_y)+0.03
+        bin_center = (-0.65, -0.15)
+        bins = []
+        for bin_pos in itertools.product(bin_grid_x, bin_grid_y):
+            print(bin_pos)
+            new_bin = create_hollow("bin", width=bin_width, length=bin_length)
+            bins.append(new_bin)
+            pbu.set_pose(new_bin, pbu.Pose(pbu.Point(x=bin_pos[0]+bin_center[0], y=bin_pos[1]+bin_center[1])))
 
     pbu.draw_pose(pbu.Pose(), parent=robot, parent_link=get_tool_link(robot))
 
 
     body_names = {
-        sink: 'sink',
+        new_bin: 'sink',
         stove: 'stove',
         radish: 'radish',
     }
