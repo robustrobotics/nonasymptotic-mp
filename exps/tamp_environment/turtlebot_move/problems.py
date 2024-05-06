@@ -193,7 +193,7 @@ def hallway_manip(robot_scale=0.2, dd=0.1, num_target=1):
     
     for _ in range(num_target-1):
         u = np.random.uniform(0, 1)
-        target_radius = min_object_size + (max_object_size - min_object_size) * (1 - np.sqrt(1 - u))
+        target_radius = min_object_size + (max_object_size - min_object_size) * (1 - (1 - u)**(1/4))
         target = create_cylinder(target_radius, 0.1, color=YELLOW)
         target_sizes[target] = target_radius
         targets.append(target)
