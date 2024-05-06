@@ -17,6 +17,7 @@ from streams import get_cfree_pose_pose_test, \
     get_cfree_obj_approach_pose_test
 import os
 import argparse
+import pybullet as p
 import string
 import itertools
 from collections import namedtuple
@@ -27,7 +28,7 @@ Shape = namedtuple(
     "Shape", ["link", "index"]
 )
 
-def create_hollow_shapes(indices, width=0.30, length=0.4, height=0.2, thickness=0.01):
+def create_hollow_shapes(indices, width=0.30, length=0.4, height=0.15, thickness=0.01):
     assert len(indices) == 3
     dims = [width, length, height]
     center = [0.0, 0.0, height / 2.0]
@@ -41,7 +42,7 @@ def create_hollow_shapes(indices, width=0.30, length=0.4, height=0.2, thickness=
         link_dims[index] = thickness
         for sign in sorted(signs):
             # name = '{:+d}'.format(sign)
-            name = "{}{}".format("-" if sign < 0 else "+", coordinates[index])
+            name = "sink_{}".format(coordinates[index])
             geom = pbu.get_box_geometry(*link_dims)
             link_center = np.array(center)
             link_center[index] += sign * (dims[index] - thickness) / 2.0
@@ -58,7 +59,7 @@ def get_tool_link(robot):
     return pbu.link_from_name(robot, TOOL_FRAMES[pbu.get_body_name(robot)])
 
 
-def pddlstream_from_problem(robot, movable=[], teleport=False, grasp_name='top'):
+def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], teleport=False, grasp_name='top'):
     #assert (not are_colliding(tree, kin_cache))
 
     domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
@@ -86,7 +87,7 @@ def pddlstream_from_problem(robot, movable=[], teleport=False, grasp_name='top')
                 init += [('Supported', body, pose, surface)]
 
     for body in fixed:
-        name = pbu.get_body_name(body)
+        name = names[body]
         if 'sink' in name:
             init += [('Sink', body)]
         if 'stove' in name:
@@ -99,7 +100,7 @@ def pddlstream_from_problem(robot, movable=[], teleport=False, grasp_name='top')
     )
 
     stream_map = {
-        'sample-pose': from_gen_fn(get_stable_gen(fixed)),
+        'sample-pose': from_gen_fn(get_stable_gen(fixed, placement_links)),
         'sample-grasp': from_gen_fn(get_grasp_gen(robot, grasp_name)),
         'inverse-kinematics': from_fn(get_ik_fn(robot, fixed, teleport)),
         'plan-free-motion': from_fn(get_free_motion_gen(robot, fixed, teleport)),
@@ -123,58 +124,137 @@ SHAPE_INDICES = {
     "y_walls": [[], [-1, +1], [-1]],
 }
 
+def create_link_body(geoms, poses, colors=None):
+    """
+    Create a body with multiple linked parts connected via revolute joints.
+    :param geoms: List of half-extents for each part (geometries).
+    :param poses: List of relative poses (positions/orientations) for each geometry.
+    :param colors: List of colors for each geometry (optional, uses gray by default).
+    :return: The ID of the base body.
+    """
+    # Ensure the input lists are valid
+    assert len(geoms) == len(poses), "Number of geometries must match the number of poses."
+    if colors is None:
+        colors = [[0.5, 0.5, 0.5, 1.0]] * len(geoms)
+
+    # Base properties (first geometry is the base)
+    base_collision_shape = -1  # Indicating no collision shape
+    base_visual_shape = -1  # Indicating no visual shape
+
+    # Initialize the base position (logical root)
+    # base_position = [0, 0, 0]
+    # base_orientation = p.getQuaternionFromEuler([0, 0, 0])
+
+    # Lists to hold properties for each link
+    link_masses = []
+    link_collision_shapes = []
+    link_visual_shapes = []
+    link_positions = []
+    link_orientations = []
+    link_joint_types = []
+    link_joint_axes = []
+    link_parent_indices = []
+
+    # Fill out each link's properties
+    for index in range(0, len(geoms)):
+        link_collision = p.createCollisionShape(p.GEOM_BOX, halfExtents=geoms[index]['halfExtents'])
+        link_visual = p.createVisualShape(p.GEOM_BOX, halfExtents=geoms[index]['halfExtents'], rgbaColor=colors[index])
+        link_collision_shapes.append(link_collision)
+        link_visual_shapes.append(link_visual)
+        link_positions.append(poses[index][0].tolist())  # Position of the link relative to its parent
+        link_orientations.append(poses[index][1])  # Assuming default orientation
+        link_masses.append(0.0)  # Set link mass
+        link_joint_types.append(p.JOINT_FIXED)  # Joint type (e.g., revolute)
+        link_joint_axes.append([0, 0, 1])  # Example axis, modify as needed
+        link_parent_indices.append(0)  # Link parent index is the previous link
+
+    # Create the entire articulated body with all links
+    base_body = p.createMultiBody(
+        baseMass=0.0,
+        baseCollisionShapeIndex=base_collision_shape,
+        baseVisualShapeIndex=base_visual_shape,
+        basePosition = [0,0,0],  # Position of the base
+        linkMasses=link_masses,
+        linkCollisionShapeIndices=link_collision_shapes,
+        linkVisualShapeIndices=link_visual_shapes,
+        linkPositions=link_positions,
+        linkOrientations=link_orientations,
+        linkInertialFramePositions=[[0, 0, 0]] * (len(geoms)),
+        linkInertialFrameOrientations=[[0, 0, 0, 1]] * (len(geoms)),
+        linkParentIndices=link_parent_indices,
+        linkJointTypes=link_joint_types,
+        linkJointAxis=link_joint_axes
+    )
+
+    return base_body
+
+
 def create_hollow(category, color=pbu.GREY, *args, **kwargs):
     indices = SHAPE_INDICES[category]
     shapes = create_hollow_shapes(indices, *args, **kwargs)
-    _, geoms, poses = zip(*shapes)
+    print(shapes)
+    name, geoms, poses = zip(*shapes)
     colors = len(shapes) * [color]
-    collision_id, visual_id = pbu.create_shape_array(geoms, poses, colors)
-    body = pbu.create_body(collision_id, visual_id, mass=pbu.STATIC_MASS)
+    body = create_link_body(geoms, poses)
     return body
 
 
 def load_world():
 
     pbu.set_default_camera()
-    pbu.draw_global_system()
+    # pbu.draw_global_system()
+    num_radish = 3
+    radishes = []
+    
     with pbu.HideOutput():
         robot = pbu.load_model(pbu.DRAKE_IIWA_URDF, fixed_base=True)
         # pbu.set_joint_positions(robot, pbu.get_movable_joints(robot), DEFAULT_ARM_POS)
         floor = pbu.load_model('models/short_floor.urdf')
         # sink = pbu.load_model(pbu.SINK_URDF, pose=pbu.Pose(pbu.Point(x=-0.5)))
         stove = pbu.load_model(pbu.STOVE_URDF, pose=pbu.Pose(pbu.Point(x=+0.5)))
-        radish = pbu.load_model(pbu.BLOCK_URDF, fixed_base=False)
-        container_width = 0.3
-        container_length = 0.3
+        for _ in range(num_radish):
+            radishes.append(pbu.load_model(pbu.BLOCK_URDF, fixed_base=False))
+
+        container_width = 0.35
+        container_length = 0.35
         grid_size_x = 4
         grid_size_y = 4
+        # grid_size_x = 1
+        # grid_size_y = 1
         bin_grid_x = list(np.linspace(0, container_width, grid_size_x))
         bin_grid_y = list(np.linspace(0, container_width, grid_size_y))
         bin_width = container_width/float(grid_size_x)+0.03
         bin_length = container_length/float(grid_size_y)+0.03
-        bin_center = (-0.65, -0.15)
+        bin_center = (-0.68, -container_width/2.0)
         bins = []
         for bin_pos in itertools.product(bin_grid_x, bin_grid_y):
-            print(bin_pos)
             new_bin = create_hollow("bin", width=bin_width, length=bin_length)
             bins.append(new_bin)
             pbu.set_pose(new_bin, pbu.Pose(pbu.Point(x=bin_pos[0]+bin_center[0], y=bin_pos[1]+bin_center[1])))
 
-    pbu.draw_pose(pbu.Pose(), parent=robot, parent_link=get_tool_link(robot))
+    # pbu.draw_pose(pbu.Pose(), parent=robot, parent_link=get_tool_link(robot))
 
-
-    body_names = {
-        new_bin: 'sink',
+    body_names = {bini: 'sink_'+str(bini) for bini in bins} | {
+        
         stove: 'stove',
-        radish: 'radish',
-    }
-    movable_bodies = [radish]
+        
+        floor: 'floor'
+    } | {radish: 'radish_'+str(radish) for radish in radishes}
+    movable_bodies = radishes
+    placement_links = {body: None if "sink" not in name else 4 for body, name in body_names.items()}
 
+    # print(placement_links)
     fixed = get_fixed(robot, movable_bodies)
-    stable_gen = get_stable_gen(fixed)
-    pose, = next(stable_gen(radish, stove))
-    pbu.set_pose(radish, pose.value)
-    return robot, body_names, movable_bodies
+    stable_gen = get_stable_gen(fixed, placement_links)
+
+    placed = []
+    for radish in radishes:
+        pose, = next(stable_gen(radish, stove, obstacles=placed)) 
+        pbu.set_pose(radish, pose.value)
+        placed.append(radish)
+
+   
+    return robot, body_names, movable_bodies, placement_links
 
 def postprocess_plan(plan):
     paths = []
@@ -193,14 +273,14 @@ def main():
     
     pbu.connect(use_gui=True)
     teleport = False
-    robot, names, movable = load_world()
+    robot, names, movable, placement_links = load_world()
     print('Objects:', names)
 
     pbu.wait_if_gui()
 
     saver = pbu.WorldSaver()
 
-    problem = pddlstream_from_problem(robot, movable=movable, teleport=teleport)
+    problem = pddlstream_from_problem(robot, names=names, placement_links=placement_links, movable=movable, teleport=teleport)
     _, _, _, stream_map, init, goal = problem
     print('Init:', init)
     print('Goal:', goal)
