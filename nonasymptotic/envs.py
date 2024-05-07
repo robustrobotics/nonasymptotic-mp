@@ -1,4 +1,5 @@
 from nonasymptotic.sampler import random_point_in_mpolygon
+from nonasymptotic.util import detect_intersect
 from shapely import unary_union, difference
 from shapely.geometry import Point, Polygon
 from shapely.ops import nearest_points
@@ -15,8 +16,6 @@ import time
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-from typing import Tuple, List
-from dataclasses import dataclass
 
 
 # NOTE: apply new knowledge about shapely operators to try to vectorize geom calculations
@@ -46,7 +45,7 @@ class Environment(ABC):
     @abstractmethod
     def distance_to_path(self, query_points):
         pass
-      
+
     @property
     @abstractmethod
     def volume(self):
@@ -69,6 +68,7 @@ class StraightLine(Environment):
         self.bounds_lower = np.array([-delta_clearance] + [-delta_clearance] * (dim - 1))
         self.bounds_upper = np.array([length + delta_clearance] + [delta_clearance] * (dim - 1))
         self.line_dir = np.array([1.0] + [0.0] * (dim - 1)).reshape(1, -1)
+        self.length = length
 
         self.dim = dim
 
@@ -78,7 +78,7 @@ class StraightLine(Environment):
     def arclength_to_curve_point(self, t_normed):
         t = np.clip(t_normed, 0.0, 1.0)
         point_on_curve = np.zeros(self.dim)
-        point_on_curve[0] += t
+        point_on_curve[0] += t * self.length
         return point_on_curve
 
     def is_motion_valid(self, start, goal):
@@ -95,7 +95,7 @@ class StraightLine(Environment):
             return start_valid & goal_valid
 
     def distance_to_path(self, points):
-        proj_points_clipped = np.clip(points[:, 0], 0.0, 1.0).reshape(-1, 1)
+        proj_points_clipped = np.clip(points[:, 0], 0.0, self.length).reshape(-1, 1)
         return np.linalg.norm(points - proj_points_clipped * self.line_dir, axis=1)
 
     def is_prm_epsilon_delta_complete(self, prm, tol, n_samples_per_check=100, timeout=60.0, area_tol=1e-6,
@@ -365,40 +365,96 @@ class StraightLine(Environment):
 class NarrowPassage(Environment):
     def __init__(self, dim, clearance, seed):
         super().__init__(seed)
+        self.rng = np.random.default_rng(seed)
 
         # there are three parts: `left' end, the passage, and `right end'
         self.left_lb = np.array([-1.5] + [-0.5] * (dim - 1))
         self.left_ub = np.array([-0.5] + [0.5] * (dim - 1))
 
-        self.hallway_lb = np.array([-0.5] + [-clearance] * (dim - 1))
-        self.hallway_ub = np.array([0.5] + [clearance] * (dim - 1))
-
         self.right_lb = np.array([0.5] + [-0.5] * (dim - 1))
         self.right_ub = np.array([1.5] + [0.5] * (dim - 1))
 
-    def sample_from_env(self):
-        raise NotImplementedError
+        self.hallway_lb = np.array([-0.5] + [-clearance] * (dim - 1))
+        self.hallway_ub = np.array([0.5] + [clearance] * (dim - 1))
 
-    def arclength_to_curve_point(self, t_normed):
-        raise NotImplementedError
-
-    def is_motion_valid(self, start, goal):
-        raise NotImplementedError
-
-    def is_prm_epsilon_delta_complete(self, prm, tol):
-        raise NotImplementedError
-
-    def distance_to_path(self, query_points):
-        raise NotImplementedError
-
-    @property
-    def volume(self):
         left_dims = np.abs(self.left_ub - self.left_lb)
         right_dims = np.abs(self.right_ub - self.right_lb)
         hall_dims = np.abs(self.hallway_ub - self.hallway_lb)
 
-        return np.prod(left_dims) + np.prod(right_dims) + np.prod(hall_dims)
+        left_vol, right_vol, hall_vol = np.prod(left_dims), np.prod(right_dims), np.prod(hall_dims)
+        self.vol = left_vol + right_vol + hall_vol
 
+        self.p_left, self.p_right, self.p_hall = left_vol / self.vol, right_vol / self.vol, hall_vol / self.vol
+        self.lined_up_bounds = [
+            (self.left_lb, self.left_ub),
+            (self.right_lb, self.right_ub),
+            (self.hallway_lb, self.hallway_ub),
+        ]
+
+        self.dim = dim
+        self.line_dir = np.array([1.0] + [0.0] * self.dim)
+
+        # (see is motion valid for definition of lines)
+        self.coll_lines = [
+            (np.array([-0.5, clearance]), np.array([-0.5, 0.5])),
+            (np.array([-0.5, -clearance]), np.array([-0.5, -0.5])),
+            (np.array([-0.5, clearance]), np.array([0.5, clearance])),
+            (np.array([-0.5, -clearance]), np.array([0.5, -clearance])),
+            (np.array([0.5, clearance]), np.array([0.5, 0.5])),
+            (np.array([0.5, -clearance]), np.array([0.5, -0.5])),
+        ]
+
+    def sample_from_env(self):
+        # roll a three-sided weighted die for which box to sample from.
+        # then sample from the box.
+
+        box_bounds = self.rng.choice(self.lined_up_bounds, p=[self.p_left, self.p_right, self.p_hall])
+        return self.rng.uniform(box_bounds[0], box_bounds[1])
+
+    def arclength_to_curve_point(self, t_normed):
+        t = np.clip(t_normed, 0.0, 1.0)
+        point_on_curve = np.array([-0.5] + [0.0] * self.dim)
+        point_on_curve[0] += t
+        return point_on_curve
+
+    def is_motion_valid(self, start, goal):
+        # since we're doing linear checks, this boils down to projecting onto each dimension and checking
+        # each linear path separately
+
+        # we need to check if the `corner` generated by the narrow passage has moved passed the
+        # portion half-plane determined by the two points.
+
+        # we check in the plane spanned by 1st dim and ith dim for 1 < i <= dim
+
+        # upper box is [-0.5, 0.5] \times [clearance, 0.5] in each dim
+        #   check three edges:
+        #       [-0.5, clearance -> 0.5], [-0.5 -> 0.5, clearance], [0.5, clearance -> 0.5]
+
+        # lower box is [-0.5, 0.5] \times [-clearance, -0.5] in each dim
+        #   check three edges:
+        #       [-0.5, -clearance -> -0.5], [-0.5 -> 0.5, -clearance], [0.5, -clearance -> -0.5]
+
+        is_colliding = np.zeros((start.shape[0])).astype(bool)
+        for i_d in range(1, self.dim):
+            start_proj = start[:, [0, i_d]]
+            goal_proj = goal[:, [0, i_d]]
+
+            # check for colls against lines commented above (defined in instantiation)
+            for c_1, c_2 in self.coll_lines:
+                is_colliding = np.logical_or(is_colliding, detect_intersect(start_proj, goal_proj, c_1, c_2))
+
+        return is_colliding
+
+    def is_prm_epsilon_delta_complete(self, prm, tol):
+        raise NotImplementedError
+
+    def distance_to_path(self, points):
+        proj_points_clipped = np.clip(points[:, 0], 0.0, 1.0).reshape(-1, 1)
+        return np.linalg.norm(points - proj_points_clipped * self.line_dir, axis=1)
+
+    @property
+    def volume(self):
+        return self.vol
 
 
 class GrayCodeWalls(Environment):
