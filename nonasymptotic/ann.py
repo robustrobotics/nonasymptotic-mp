@@ -42,7 +42,7 @@ class KGraphANN(ApproximateNearestNeighbor):
         self.k_neighbors = None
         self.seed = None
         self.embedded_data = None
-        self.save_txt_path = None
+        self.save_txt_path = str(os.path.join(TEMP_DIR, str(uuid.uuid4()) + '.txt'))
 
     def new_graph_from_data(self, data, k_neighbors) -> (np.ndarray, np.ndarray):
         self.k_neighbors = k_neighbors
@@ -57,7 +57,6 @@ class KGraphANN(ApproximateNearestNeighbor):
         nn_index.build(reverse=0, K=self.k_neighbors, L=self.k_neighbors + 50, S=30)
 
         # save, since we only want the graph (not to use as an index)
-        self.save_txt_path = str(os.path.join(TEMP_DIR, str(uuid.uuid4()) + '.txt'))
         nn_index.save_text(self.save_txt_path)
 
         # parse the text file and return
