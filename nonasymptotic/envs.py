@@ -59,7 +59,7 @@ class StraightLine(Environment):
     the given delta_clearance.
     """
 
-    def __init__(self, dim, delta_clearance, seed=None):
+    def __init__(self, dim, delta_clearance, length=1.0, seed=None):
         super().__init__(seed)
         assert dim >= 2
         assert delta_clearance >= 0
@@ -67,7 +67,7 @@ class StraightLine(Environment):
         # define the box bounds. first dim will be the one containing the line. the remaining
         # will just be delta-tube in the l_infinity norm.
         self.bounds_lower = np.array([-delta_clearance] + [-delta_clearance] * (dim - 1))
-        self.bounds_upper = np.array([1.0 + delta_clearance] + [delta_clearance] * (dim - 1))
+        self.bounds_upper = np.array([length + delta_clearance] + [delta_clearance] * (dim - 1))
         self.line_dir = np.array([1.0] + [0.0] * (dim - 1)).reshape(1, -1)
 
         self.dim = dim
@@ -100,6 +100,8 @@ class StraightLine(Environment):
 
     def is_prm_epsilon_delta_complete(self, prm, tol, n_samples_per_check=100, timeout=60.0, area_tol=1e-6,
                                       vis=False):
+        raise NotImplementedError('Need to generalize to arbitrarily long envs.')
+
         conn_r = prm.conn_r
         prm_points_to_cvx_hull = {}
 
@@ -198,12 +200,6 @@ class StraightLine(Environment):
 
                         inner_approx_ray_p1 = inner_approx_p1 + ray_slope1
                         inner_approx_ray_p2 = inner_approx_p1 + ray_slope2
-
-                    # the ray we add depends on arrangement of approx_p1 and approx_p2
-                    # inner_approx_ray_p1, inner_approx_ray_p2 = (inner_approx_p1 + ray_slope1,
-                    #                                             inner_approx_p2 + ray_slope2) \
-                    #     if inner_not_flip_rays else (inner_approx_p1 + ray_slope2,
-                    #                                  inner_approx_p2 + ray_slope1)
 
                     inner_approx_open = Polygon([inner_approx_ray_p1,
                                                  inner_approx_p1,
@@ -364,6 +360,45 @@ class StraightLine(Environment):
     def volume(self):
         box_lengths = np.abs(self.bounds_upper - self.bounds_lower)
         return np.prod(box_lengths)
+
+
+class NarrowPassage(Environment):
+    def __init__(self, dim, clearance, seed):
+        super().__init__(seed)
+
+        # there are three parts: `left' end, the passage, and `right end'
+        self.left_lb = np.array([-1.5] + [-0.5] * (dim - 1))
+        self.left_ub = np.array([-0.5] + [0.5] * (dim - 1))
+
+        self.hallway_lb = np.array([-0.5] + [-clearance] * (dim - 1))
+        self.hallway_ub = np.array([0.5] + [clearance] * (dim - 1))
+
+        self.right_lb = np.array([0.5] + [-0.5] * (dim - 1))
+        self.right_ub = np.array([1.5] + [0.5] * (dim - 1))
+
+    def sample_from_env(self):
+        raise NotImplementedError
+
+    def arclength_to_curve_point(self, t_normed):
+        raise NotImplementedError
+
+    def is_motion_valid(self, start, goal):
+        raise NotImplementedError
+
+    def is_prm_epsilon_delta_complete(self, prm, tol):
+        raise NotImplementedError
+
+    def distance_to_path(self, query_points):
+        raise NotImplementedError
+
+    @property
+    def volume(self):
+        left_dims = np.abs(self.left_ub - self.left_lb)
+        right_dims = np.abs(self.right_ub - self.right_lb)
+        hall_dims = np.abs(self.hallway_ub - self.hallway_lb)
+
+        return np.prod(left_dims) + np.prod(right_dims) + np.prod(hall_dims)
+
 
 
 class GrayCodeWalls(Environment):
