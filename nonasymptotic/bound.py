@@ -33,7 +33,13 @@ def compute_sauer_shelah_bound(m_samples, rho, vc_dim):
     return 2 ** log2_prob
 
 
-def doubling_search_over_sauer_shelah(rho, vc_dim, success_prob):
+def doubling_sample_search_over_prob_bound(samples_to_prob, success_prob):
+    """
+    :param samples_to_prob: A function that consumes an integer number of samples
+    and outputs a probability.
+    :param success_prob: Probability for random construction to be met.
+    :return: Number of samples required to meet success probability.
+    """
     # we're exploiting the monotonicity of the increase/decrease behavior of
     # the probability bound.
     failure_prob = 1 - success_prob
@@ -41,8 +47,8 @@ def doubling_search_over_sauer_shelah(rho, vc_dim, success_prob):
     m_samples_lb = 1
     m_samples_ub = 2
     while True:
-        cand_gamma = compute_sauer_shelah_bound(m_samples_ub, rho, vc_dim)
-        next_gamma = compute_sauer_shelah_bound(m_samples_ub + 1, rho, vc_dim)
+        cand_gamma = samples_to_prob(m_samples_ub)
+        next_gamma = samples_to_prob(m_samples_ub + 1)
 
         # move past the desired probability and ensure we are 'downhill'
         if failure_prob >= cand_gamma >= next_gamma:
@@ -62,8 +68,8 @@ def doubling_search_over_sauer_shelah(rho, vc_dim, success_prob):
 
         test_samples = int((m_samples_lb + m_samples_ub) / 2)
         # test if the tester is the sample count we're looking for
-        cand_gamma = compute_sauer_shelah_bound(test_samples, rho, vc_dim)
-        next_gamma = compute_sauer_shelah_bound(test_samples + 1, rho, vc_dim)
+        cand_gamma = samples_to_prob(test_samples)
+        next_gamma = samples_to_prob(test_samples + 1)
 
         # if the candidate failure probability is still too high, or
         # if we're now going 'downhill' yet, then move up the lower bound.
@@ -98,7 +104,10 @@ def compute_numerical_bound(clearance, success_prob, coll_free_volume, dim, tol)
     # first, forward search on a doubling scheme to overshoot on the number of samples.
     # we stop if the probability is #1 decaying, and #2 we've exceeded desired probability
 
-    return doubling_search_over_sauer_shelah(rho, vc_dim, success_prob), conn_r
+    return doubling_sample_search_over_prob_bound(
+        lambda m: compute_sauer_shelah_bound(m, rho, vc_dim),
+        success_prob
+    ), conn_r
 
 
 def compute_connection_radius(clearance, tol):
