@@ -72,7 +72,7 @@ def doubling_sample_search_over_prob_bound(samples_to_prob, success_prob):
         next_gamma = samples_to_prob(test_samples + 1)
 
         # if the candidate failure probability is still too high, or
-        # if we're now going 'downhill' yet, then move up the lower bound.
+        # if we're not going 'downhill' yet, then move up the lower bound.
         if cand_gamma > failure_prob or next_gamma > cand_gamma:
             m_samples_lb = test_samples
 
@@ -112,3 +112,39 @@ def compute_numerical_bound(clearance, success_prob, coll_free_volume, dim, tol)
 
 def compute_connection_radius(clearance, tol):
     return 2 * clearance * (tol + 1) / np.sqrt(1 + tol ** 2)
+
+
+def compute_tail_knn_radius_prob(m_samples, k_neighbors, conn_rad, dim, vol_env):
+    measures_unit_sphere = compute_vol_unit_sphere(dim) / vol_env
+    p_r_ball = measures_unit_sphere * (conn_rad ** dim)
+    tail_val = k_neighbors / p_r_ball / (m_samples - 1) - 1
+
+    # removing a degenerate case (if p_r_ball is too large, then
+    # all points will land in it and mess everything up)
+    # but preserving some monotonicity properties of the prob bound
+    tail_val = np.maximum(tail_val, 0.0)
+
+    p_fail = m_samples * np.exp(-2 * (m_samples - 1) * tail_val ** 2)
+    return p_fail
+
+
+def halving_radius_search_over_prob_bound(radius_to_prob, rad_lb, rad_ub, success_prob, tol=1e-6):
+    assert rad_lb < rad_ub
+    failure_prob = 1 - success_prob
+
+    while True:
+        if rad_ub - rad_lb <= tol:
+            return rad_lb
+
+        elif rad_ub < rad_lb:
+            raise ArithmeticError('Something wrong happened.')
+
+        test_rad = (rad_lb + rad_ub) / 2
+        test_gamma = radius_to_prob(test_rad)
+        next_test_gamma = radius_to_prob(test_rad - tol / 2)
+
+        # ensure we are: decreasing as radius gets smaller and within the prob bound
+        if next_test_gamma > test_gamma or test_gamma > failure_prob:
+            rad_ub = test_rad
+        else:
+            rad_lb = test_rad
