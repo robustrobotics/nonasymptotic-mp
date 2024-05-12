@@ -114,23 +114,49 @@ def compute_connection_radius(clearance, tol):
     return 2 * clearance * (tol + 1) / np.sqrt(1 + tol ** 2)
 
 
-def compute_tail_knn_radius_prob(m_samples, k_neighbors, conn_rad, dim, vol_env):
+def compute_tail_knn_radius_log_prob_hoeffding(m_samples, k_neighbors, conn_rad, dim, vol_env):
     measures_unit_sphere = compute_vol_unit_sphere(dim) / vol_env
     p_r_ball = measures_unit_sphere * (conn_rad ** dim)
-    tail_val = k_neighbors / p_r_ball / (m_samples - 1) - 1
+    tail_val = k_neighbors / (m_samples - 1) - p_r_ball
 
     # removing a degenerate case (if p_r_ball is too large, then
     # all points will land in it and mess everything up)
     # but preserving some monotonicity properties of the prob bound
     tail_val = np.maximum(tail_val, 0.0)
 
-    p_fail = m_samples * np.exp(-2 * (m_samples - 1) * tail_val ** 2)
-    return p_fail
+    log_p_fail = np.log(m_samples) - 2 * (m_samples - 1) * tail_val ** 2
+    return log_p_fail
 
 
-def halving_radius_search_over_prob_bound(radius_to_prob, rad_lb, rad_ub, success_prob, tol=1e-6):
+def compute_tail_knn_radius_log_prob_hoeffding_mean_variant(m_samples, k_neighbors, conn_rad, dim, vol_env):
+    measures_unit_sphere = compute_vol_unit_sphere(dim) / vol_env
+    p_r_ball = measures_unit_sphere * (conn_rad ** dim)
+    tail_val = k_neighbors / (m_samples - 1) / p_r_ball - 1
+
+    # removing a degenerate case (if p_r_ball is too large, then
+    # all points will land in it and mess everything up)
+    # but preserving some monotonicity properties of the prob bound
+    tail_val = np.maximum(tail_val, 0.0)
+
+    log_p_fail = np.log(m_samples) - 2 * (m_samples - 1) * tail_val ** 2 / (p_r_ball ** 2)
+    return log_p_fail
+
+
+def compute_tail_knn_radius_log_prob_chernoff(m_samples, k_neighbors, conn_rad, dim, vol_env):
+    measures_unit_sphere = compute_vol_unit_sphere(dim) / vol_env
+    p_r_ball = np.minimum(measures_unit_sphere * (conn_rad ** dim), 1.0)
+    mu = (m_samples - 1) * p_r_ball
+    tail_val = k_neighbors
+
+    log_p_fail = np.log(m_samples) - mu + tail_val * (1 + np.log(mu) - np.log(tail_val))
+
+    return log_p_fail
+
+
+def halving_radius_search_over_log_prob_bound(radius_to_log_prob, rad_lb, rad_ub, success_prob, tol=1e-6):
     assert rad_lb < rad_ub
     failure_prob = 1 - success_prob
+    log_failure_prob = np.log(failure_prob)
 
     while True:
         if rad_ub - rad_lb <= tol:
@@ -140,11 +166,25 @@ def halving_radius_search_over_prob_bound(radius_to_prob, rad_lb, rad_ub, succes
             raise ArithmeticError('Something wrong happened.')
 
         test_rad = (rad_lb + rad_ub) / 2
-        test_gamma = radius_to_prob(test_rad)
-        next_test_gamma = radius_to_prob(test_rad - tol / 2)
+        test_gamma = radius_to_log_prob(test_rad)
+        next_test_gamma = radius_to_log_prob(test_rad - tol / 2)
 
         # ensure we are: decreasing as radius gets smaller and within the prob bound
-        if next_test_gamma > test_gamma or test_gamma > failure_prob:
+        if next_test_gamma >= test_gamma or test_gamma > log_failure_prob:
             rad_ub = test_rad
         else:
             rad_lb = test_rad
+
+
+def linear_radius_search_over_prob_bound(radius_to_prob, rad_lb, rad_ub, success_prob, tol=1e-6):
+    failure_prob = 1 - success_prob
+    rad = rad_lb
+    while True:
+        if rad > rad_ub:
+            raise ArithmeticError('Adjust tol, search must be finer-grained.')
+
+        test_gamma = radius_to_prob(rad + tol)
+        if test_gamma > failure_prob:
+            return rad
+
+
