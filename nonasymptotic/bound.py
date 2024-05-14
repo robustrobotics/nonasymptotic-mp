@@ -142,14 +142,24 @@ def compute_tail_knn_radius_log_prob_hoeffding_mean_variant(m_samples, k_neighbo
     return log_p_fail
 
 
-def compute_tail_knn_radius_log_prob_chernoff(m_samples, k_neighbors, conn_rad, dim, vol_env):
+def compute_tail_knn_radius_log_prob_chernoff_generic(m_samples, k_neighbors, conn_rad, dim, vol_env):
     measures_unit_sphere = compute_vol_unit_sphere(dim) / vol_env
     p_r_ball = np.minimum(measures_unit_sphere * (conn_rad ** dim), 1.0)
     mu = (m_samples - 1) * p_r_ball
     tail_val = k_neighbors
 
     log_p_fail = np.log(m_samples) - mu + tail_val * (1 + np.log(mu) - np.log(tail_val))
+    return log_p_fail
 
+
+def compute_tail_knn_radius_log_prob_chernoff_kl(m_samples, k_neighbors, conn_rad, dim, vol_env):
+    measures_unit_sphere = compute_vol_unit_sphere(dim) / vol_env
+    p_r_ball = np.minimum(measures_unit_sphere * (conn_rad ** dim), 1.0)
+    tail_val = np.maximum(k_neighbors / m_samples - p_r_ball, 0.0)
+
+    ppt_dist = np.array([p_r_ball + tail_val, 1.0 - p_r_ball - tail_val])
+    p_dist = np.array([p_r_ball, 1.0 - p_r_ball])
+    log_p_fail = np.log(m_samples) - scipy.stats.entropy(ppt_dist, qk=p_dist) * (m_samples - 1)
     return log_p_fail
 
 
@@ -186,5 +196,3 @@ def linear_radius_search_over_prob_bound(radius_to_prob, rad_lb, rad_ub, success
         test_gamma = radius_to_prob(rad + tol)
         if test_gamma > failure_prob:
             return rad
-
-
