@@ -20,7 +20,7 @@ def compute_rho(clearance, tol, dim, vol_env):
     return measures_unit_sphere * (compute_epsilon_net_radius(clearance, tol) ** dim)
 
 
-def compute_sauer_shelah_bound(m_samples, rho, vc_dim):
+def compute_sauer_shelah_bound_log2(m_samples, rho, vc_dim):
     # switched to exact computation so scipy can handle big integers,
     # but the function can no longer be vectorized :(
 
@@ -30,28 +30,30 @@ def compute_sauer_shelah_bound(m_samples, rho, vc_dim):
     #   in 2-logspace. math.log2 doesn't convert to float (unlike numpy), so we use that here.
 
     log2_prob = math.log2(ss_comb_sum) + (-rho * m_samples / 2) + 1
-    return 2 ** log2_prob
+    return log2_prob
+    # return 2 ** log2_prob
 
 
-def doubling_sample_search_over_prob_bound(samples_to_prob, success_prob):
+def doubling_sample_search_over_log2_prob_bound(samples_to_log2_prob, success_prob):
     """
-    :param samples_to_prob: A function that consumes an integer number of samples
+    :param samples_to_log2_prob: A function that consumes an integer number of samples
     and outputs a probability.
     :param success_prob: Probability for random construction to be met.
+    :param log_base: Log base of probability bound function.
     :return: Number of samples required to meet success probability.
     """
     # we're exploiting the monotonicity of the increase/decrease behavior of
     # the probability bound.
-    failure_prob = 1 - success_prob
+    log_failure_prob = math.log2(1 - success_prob)
 
     m_samples_lb = 1
     m_samples_ub = 2
     while True:
-        cand_gamma = samples_to_prob(m_samples_ub)
-        next_gamma = samples_to_prob(m_samples_ub + 1)
+        cand_gamma = samples_to_log2_prob(m_samples_ub)
+        next_gamma = samples_to_log2_prob(m_samples_ub + 1)
 
         # move past the desired probability and ensure we are 'downhill'
-        if failure_prob >= cand_gamma >= next_gamma:
+        if log_failure_prob >= cand_gamma >= next_gamma:
             break
 
         m_samples_ub *= 2
@@ -68,12 +70,12 @@ def doubling_sample_search_over_prob_bound(samples_to_prob, success_prob):
 
         test_samples = int((m_samples_lb + m_samples_ub) / 2)
         # test if the tester is the sample count we're looking for
-        cand_gamma = samples_to_prob(test_samples)
-        next_gamma = samples_to_prob(test_samples + 1)
+        cand_gamma = samples_to_log2_prob(test_samples)
+        next_gamma = samples_to_log2_prob(test_samples + 1)
 
         # if the candidate failure probability is still too high, or
         # if we're not going 'downhill' yet, then move up the lower bound.
-        if cand_gamma > failure_prob or next_gamma > cand_gamma:
+        if cand_gamma > log_failure_prob or next_gamma > cand_gamma:
             m_samples_lb = test_samples
 
         # otherwise, move down the upper bound
