@@ -7,7 +7,7 @@
 
     (Pose ?o ?p)
     (Grasp ?o ?g)
-    (Kin ?o ?p ?g ?q ?t)
+    (Kin ?o ?p ?g ?q)
     (FreeMotion ?q1 ?t ?q2)
     (HoldingMotion ?q1 ?t ?q2 ?o ?g)
     (Supported ?o ?p ?r)
@@ -43,16 +43,16 @@
   )
 
   (:action pick
-    :parameters (?o ?p ?g ?q ?t)
-    :precondition (and (Kin ?o ?p ?g ?q ?t)
+    :parameters (?o ?p ?g ?q)
+    :precondition (and (Kin ?o ?p ?g ?q)
                        (AtPose ?o ?p) (HandEmpty) (AtConf ?q)
                   )
     :effect (and (AtGrasp ?o ?g) (CanMove)
                  (not (AtPose ?o ?p)) (not (HandEmpty)))
   )
   (:action place
-    :parameters (?o ?p ?g ?q ?t)
-    :precondition (and (Kin ?o ?p ?g ?q ?t)
+    :parameters (?o ?p ?g ?q)
+    :precondition (and (Kin ?o ?p ?g ?q)
                        (AtGrasp ?o ?g) (AtConf ?q)
                   )
     :effect (and (AtPose ?o ?p) (HandEmpty) (CanMove)

@@ -21,7 +21,7 @@ import itertools
 from collections import namedtuple
 import numpy as np
 
-# DEFAULT_ARM_POS = (-2.74228529839567, -1.1180049615399599, 2.2107771723948684, -1.320262400722078, 0.9131962195838295, 1.1464814897121636, 0.009226410633654493)
+DEFAULT_ARM_POS = (0, 0, 0, 0, 0, 0, 0)
 Shape = namedtuple(
     "Shape", ["link", "index"]
 )
@@ -57,7 +57,7 @@ def get_tool_link(robot):
     return pbu.link_from_name(robot, TOOL_FRAMES[pbu.get_body_name(robot)])
 
 
-def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], teleport=False, grasp_name='top'):
+def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], fixed=[], teleport=False, grasp_name='top'):
     #assert (not are_colliding(tree, kin_cache))
 
     domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
@@ -65,21 +65,31 @@ def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], t
     constant_map = {}
 
     print('Robot:', robot)
-    conf = BodyConf(robot, pbu.get_configuration(robot))
+    pbu.set_joint_positions(robot, pbu.get_movable_joints(robot), DEFAULT_ARM_POS)
+    start_conf = BodyConf(robot, pbu.get_configuration(robot))
     init = [('CanMove',),
-            ('Conf', conf),
-            ('AtConf', conf),
+            ('Conf', start_conf),
+            ('AtConf', start_conf),
             ('HandEmpty',)]
 
-    fixed = get_fixed(robot, movable)
+
     print('Movable:', movable)
     print('Fixed:', fixed)
     sinks = [surface for surface in fixed if 'sink' in names[surface]]
+    grasp_gen = get_grasp_gen(robot, grasp_name)
+    body_to_grasp = {}
     for body in movable:
+        grasp, = next(grasp_gen(body))
+        body_to_grasp[body] = grasp
         pose = BodyPose(body, pbu.get_pose(body))
-        init += [('Graspable', body),
+        conf = get_ik_fn(robot, body, pose, grasp, fixed=fixed, teleport=teleport)
+        init += [('Grasp', body, grasp),
+                 ('Graspable', body),
                  ('Pose', body, pose),
-                 ('AtPose', body, pose)]
+                 ('AtPose', body, pose),
+                 ('Conf', conf),
+                 ('Kin', body, pose, grasp, conf)]
+        
         for surface in fixed:
             name = names[surface]
             if 'sink' in name:
@@ -91,8 +101,18 @@ def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], t
     assert len(movable) == len(sinks)
     for body, sink in zip(movable, sinks):
         stable_gen = get_fixed_stable_gen(fixed, placement_links)
+        grasp = body_to_grasp[body]
+        
         for (bp,) in stable_gen(body, sink):
-            init += [('Pose', body, bp), ("Supported", body, bp, sink)]
+            conf = get_ik_fn(robot, body, bp, grasp, fixed=fixed, teleport=teleport)
+            if(conf is not None):
+                init += [('Pose', body, bp), 
+                         ("Supported", body, bp, sink),
+                         ("Conf", conf),
+                         ('Kin', body, bp, grasp, conf)]
+                break
+        assert conf is not None
+
 
     for body in fixed:
         name = names[body]
@@ -102,13 +122,14 @@ def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], t
             init += [('Stove', body)]
 
     goal = ['and',
-            ('AtConf', conf),
+            ('AtConf', start_conf),
     ]+[('Cleaned', body) for body in movable]
+    # goal = ['not',
+    #         ('HandEmpty', ),
+    # ]
 
 
     stream_map = {
-        'sample-grasp': from_gen_fn(get_grasp_gen(robot, grasp_name)),
-        'inverse-kinematics': from_fn(get_ik_fn(robot, fixed, teleport)),
         'plan-free-motion': from_fn(get_free_motion_gen(robot, fixed, teleport)),
         'plan-holding-motion': from_fn(get_holding_motion_gen(robot, fixed, teleport)),
     }
@@ -205,22 +226,21 @@ def load_world():
 
     pbu.set_default_camera()
     # pbu.draw_global_system()
-    num_radish = 6
+    num_radish = 3
     radishes = []
     
     with pbu.HideOutput():
         robot = pbu.load_model(pbu.DRAKE_IIWA_URDF, fixed_base=True)
-        # pbu.set_joint_positions(robot, pbu.get_movable_joints(robot), DEFAULT_ARM_POS)
         floor = pbu.load_model('models/short_floor.urdf')
         # sink = pbu.load_model(pbu.SINK_URDF, pose=pbu.Pose(pbu.Point(x=-0.5)))
         stove = pbu.load_model(pbu.STOVE_URDF, pose=pbu.Pose(pbu.Point(x=+0.5)))
         for _ in range(num_radish):
             radishes.append(pbu.load_model(pbu.BLOCK_URDF, fixed_base=False))
 
-        container_width = 0.15
-        container_length = 0.15
-        container_height = 0.2
-        num_grid_x = 2
+        container_width = 0.20
+        container_length = 0.20
+        container_height = 0.15
+        num_grid_x = 1
         num_grid_y = 3
         bin_grid_x = [i*container_width for i in range(num_grid_x)]
         bin_grid_y = [i*container_length for i in range(num_grid_y)]
@@ -243,25 +263,35 @@ def load_world():
     placement_links = {body: None if "sink" not in name else 4 for body, name in body_names.items()}
 
     # print(placement_links)
-    fixed = get_fixed(robot, movable_bodies)
+    fixed = [stove]+bins
     
 
     placed = []
+    
     for radish in radishes:
-        stable_gen = get_stable_gen(fixed, placement_links)
-        pose, = next(stable_gen(radish, stove, obstacles=placed)) 
-        pbu.set_pose(radish, pose.value)
-        placed.append(radish)
+        while(True):
+            grasp_gen = get_grasp_gen(robot, "top")
+            stable_gen = get_stable_gen(fixed, placement_links)
+            pose, = next(stable_gen(radish, stove, obstacles=placed)) 
+            pbu.set_pose(radish, pose.value)
+            grasp, = next(grasp_gen(radish))
+            conf =  get_ik_fn(robot, radish, pose, grasp, fixed=fixed, teleport=False)
+            if(conf is not None):
+                placed.append(radish)
+                break
+            
+
+
+
 
    
-    return robot, body_names, movable_bodies, placement_links
+    return robot, body_names, movable_bodies, fixed, placement_links
 
 def postprocess_plan(plan):
     paths = []
     for name, args in plan:
-        if name == 'place':
-            paths += args[-1].reverse().body_paths
-        elif name in ['move', 'move_free', 'move_holding', 'pick']:
+        
+        if name in ['move', 'move_free', 'move_holding']:
             paths += args[-1].body_paths
     return Command(paths)
 
@@ -273,14 +303,15 @@ def main():
     
     pbu.connect(use_gui=True)
     teleport = False
-    robot, names, movable, placement_links = load_world()
+    robot, names, movable, fixed, placement_links = load_world()
     print('Objects:', names)
 
     pbu.wait_if_gui()
 
     saver = pbu.WorldSaver()
 
-    problem = pddlstream_from_problem(robot, names=names, placement_links=placement_links, movable=movable, teleport=teleport)
+    problem = pddlstream_from_problem(robot, names=names, placement_links=placement_links, fixed=fixed, movable=movable, teleport=teleport)
+
     _, _, _, stream_map, init, goal = problem
     print('Init:', init)
     print('Goal:', goal)
@@ -296,6 +327,7 @@ def main():
         pbu.disconnect()
         return
 
+    pbu.set_joint_positions(robot, pbu.get_movable_joints(robot), DEFAULT_ARM_POS)
     command = postprocess_plan(plan)
     pbu.wait_for_user('Execute?')
     command.refine(num_steps=10).execute(time_step=0.001)
