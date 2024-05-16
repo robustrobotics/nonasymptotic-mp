@@ -10,6 +10,9 @@
     (Kin ?o ?p ?g ?q)
     (FreeMotion ?q1 ?t ?q2)
     (HoldingMotion ?q1 ?t ?q2 ?o ?g)
+    (InsertMotion ?q1 ?t ?q2 ?o ?g)
+    (PreInsert ?q)
+    (PostInsert ?q)
     (Supported ?o ?p ?r)
     (Traj ?t)
 
@@ -36,6 +39,14 @@
   (:action move_holding
     :parameters (?q1 ?q2 ?o ?g ?t)
     :precondition (and (HoldingMotion ?q1 ?t ?q2 ?o ?g)
+                       (AtConf ?q1) (AtGrasp ?o ?g) (CanMove)
+                  )
+    :effect (and (AtConf ?q2)
+                 (not (AtConf ?q1)) (not (CanMove)))
+  )
+  (:action move_insert
+    :parameters (?q1 ?q2 ?o ?g ?t)
+    :precondition (and (InsertMotion ?q1 ?t ?q2 ?o ?g)
                        (AtConf ?q1) (AtGrasp ?o ?g) (CanMove)
                   )
     :effect (and (AtConf ?q2)

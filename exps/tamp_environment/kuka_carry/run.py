@@ -16,6 +16,7 @@ from pddlstream.language.constants import PDDLProblem
 import os
 import argparse
 import pybullet as p
+import copy
 import string
 import itertools
 from collections import namedtuple
@@ -102,16 +103,26 @@ def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], f
     for body, sink in zip(movable, sinks):
         stable_gen = get_fixed_stable_gen(fixed, placement_links)
         grasp = body_to_grasp[body]
-        
-        for (bp,) in stable_gen(body, sink):
-            conf = get_ik_fn(robot, body, bp, grasp, fixed=fixed, teleport=teleport)
-            if(conf is not None):
-                init += [('Pose', body, bp), 
-                         ("Supported", body, bp, sink),
-                         ("Conf", conf),
-                         ('Kin', body, bp, grasp, conf)]
+        preinsert_conf = None
+        postinsert_conf = None
+        for (postinsert,) in stable_gen(body, sink):
+            preinsert = copy.deepcopy(postinsert)
+            preinsert.pose = pbu.multiply(pbu.Pose(pbu.Point(z=0.12)), preinsert.pose)
+            preinsert_conf = get_ik_fn(robot, body, preinsert, grasp, fixed=fixed, teleport=teleport)
+            postinsert_conf = get_ik_fn(robot, body, postinsert, grasp, fixed=fixed, teleport=teleport)
+            if(preinsert_conf is not None and postinsert_conf is not None):
+                init += [('Pose', body, postinsert), 
+                         ('Pose', body, preinsert), 
+                         ("Supported", body, postinsert, sink),
+                         ("Conf", preinsert_conf),
+                         ("Conf", postinsert_conf),
+                         ('Kin', body, preinsert, grasp, preinsert_conf),
+                         ('Kin', body, postinsert, grasp, postinsert_conf),
+                         ('PreInsert', preinsert_conf),
+                         ('PostInsert', postinsert_conf)]
+                
                 break
-        assert conf is not None
+        assert preinsert_conf is not None and postinsert_conf is not None
 
 
     for body in fixed:
@@ -132,6 +143,7 @@ def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], f
     stream_map = {
         'plan-free-motion': from_fn(get_free_motion_gen(robot, fixed, teleport)),
         'plan-holding-motion': from_fn(get_holding_motion_gen(robot, fixed, teleport)),
+        'plan-insert-motion': from_fn(get_holding_motion_gen(robot, fixed, teleport)),
     }
 
     print("Init: "+str(init))
@@ -290,8 +302,7 @@ def load_world():
 def postprocess_plan(plan):
     paths = []
     for name, args in plan:
-        
-        if name in ['move', 'move_free', 'move_holding']:
+        if name in ['move', 'move_free', 'move_holding', 'move_insert']:
             paths += args[-1].body_paths
     return Command(paths)
 
