@@ -8,13 +8,11 @@ import time
 import pybullet_tools.utils as pbu
 from pybullet_tools.kuka_primitives import TOOL_FRAMES, BodyPose, BodyConf, get_grasp_gen, \
     get_stable_gen, get_ik_fn, get_free_motion_gen, \
-    get_holding_motion_gen, get_movable_collision_test, get_tool_link, Command
+    get_holding_motion_gen, Command, get_fixed_stable_gen
 from pddlstream.algorithms.meta import solve
 from pddlstream.language.generator import from_gen_fn, from_fn, from_test
 from pddlstream.utils import read, get_file_path, negate_test
 from pddlstream.language.constants import PDDLProblem
-from streams import get_cfree_pose_pose_test, \
-    get_cfree_obj_approach_pose_test
 import os
 import argparse
 import pybullet as p
@@ -76,15 +74,25 @@ def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], t
     fixed = get_fixed(robot, movable)
     print('Movable:', movable)
     print('Fixed:', fixed)
+    sinks = [surface for surface in fixed if 'sink' in names[surface]]
     for body in movable:
         pose = BodyPose(body, pbu.get_pose(body))
         init += [('Graspable', body),
                  ('Pose', body, pose),
                  ('AtPose', body, pose)]
         for surface in fixed:
-            init += [('Stackable', body, surface)]
-            if pbu.is_placement(body, surface):
-                init += [('Supported', body, pose, surface)]
+            name = names[surface]
+            if 'sink' in name:
+                init += [('Stackable', body, surface)]
+                if pbu.is_placement(body, surface):
+                    init += [('Supported', body, pose, surface)]
+                
+
+    assert len(movable) == len(sinks)
+    for body, sink in zip(movable, sinks):
+        stable_gen = get_fixed_stable_gen(fixed, placement_links)
+        for (bp,) in stable_gen(body, sink):
+            init += [('Pose', body, bp), ("Supported", body, bp, sink)]
 
     for body in fixed:
         name = names[body]
@@ -93,25 +101,19 @@ def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], t
         if 'stove' in name:
             init += [('Stove', body)]
 
-    body = movable[0]
-    goal = ('and',
+    goal = ['and',
             ('AtConf', conf),
-            ('Cleaned', body),
-    )
+    ]+[('Cleaned', body) for body in movable]
+
 
     stream_map = {
-        'sample-pose': from_gen_fn(get_stable_gen(fixed, placement_links)),
         'sample-grasp': from_gen_fn(get_grasp_gen(robot, grasp_name)),
         'inverse-kinematics': from_fn(get_ik_fn(robot, fixed, teleport)),
         'plan-free-motion': from_fn(get_free_motion_gen(robot, fixed, teleport)),
         'plan-holding-motion': from_fn(get_holding_motion_gen(robot, fixed, teleport)),
-
-        'test-cfree-pose-pose': from_test(get_cfree_pose_pose_test()),
-        'test-cfree-approach-pose': from_test(get_cfree_obj_approach_pose_test()),
-        'test-cfree-traj-pose': from_test(negate_test(get_movable_collision_test())), #get_cfree_traj_pose_test()),
-
-        'TrajCollision': get_movable_collision_test(),
     }
+
+    print("Init: "+str(init))
 
     return PDDLProblem(domain_pddl, constant_map, stream_pddl, stream_map, init, goal)
 
@@ -203,7 +205,7 @@ def load_world():
 
     pbu.set_default_camera()
     # pbu.draw_global_system()
-    num_radish = 3
+    num_radish = 6
     radishes = []
     
     with pbu.HideOutput():
@@ -215,20 +217,17 @@ def load_world():
         for _ in range(num_radish):
             radishes.append(pbu.load_model(pbu.BLOCK_URDF, fixed_base=False))
 
-        container_width = 0.35
-        container_length = 0.35
-        grid_size_x = 4
-        grid_size_y = 4
-        # grid_size_x = 1
-        # grid_size_y = 1
-        bin_grid_x = list(np.linspace(0, container_width, grid_size_x))
-        bin_grid_y = list(np.linspace(0, container_width, grid_size_y))
-        bin_width = container_width/float(grid_size_x)+0.03
-        bin_length = container_length/float(grid_size_y)+0.03
+        container_width = 0.15
+        container_length = 0.15
+        container_height = 0.2
+        num_grid_x = 2
+        num_grid_y = 3
+        bin_grid_x = [i*container_width for i in range(num_grid_x)]
+        bin_grid_y = [i*container_length for i in range(num_grid_y)]
         bin_center = (-0.68, -container_width/2.0)
         bins = []
         for bin_pos in itertools.product(bin_grid_x, bin_grid_y):
-            new_bin = create_hollow("bin", width=bin_width, length=bin_length)
+            new_bin = create_hollow("bin", width=container_width, length=container_length, height = container_height)
             bins.append(new_bin)
             pbu.set_pose(new_bin, pbu.Pose(pbu.Point(x=bin_pos[0]+bin_center[0], y=bin_pos[1]+bin_center[1])))
 
@@ -245,10 +244,11 @@ def load_world():
 
     # print(placement_links)
     fixed = get_fixed(robot, movable_bodies)
-    stable_gen = get_stable_gen(fixed, placement_links)
+    
 
     placed = []
     for radish in radishes:
+        stable_gen = get_stable_gen(fixed, placement_links)
         pose, = next(stable_gen(radish, stove, obstacles=placed)) 
         pbu.set_pose(radish, pose.value)
         placed.append(radish)
