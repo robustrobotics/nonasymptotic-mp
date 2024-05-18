@@ -106,8 +106,8 @@ def compute_numerical_bound(clearance, success_prob, coll_free_volume, dim, tol)
     # first, forward search on a doubling scheme to overshoot on the number of samples.
     # we stop if the probability is #1 decaying, and #2 we've exceeded desired probability
 
-    return doubling_sample_search_over_prob_bound(
-        lambda m: compute_sauer_shelah_bound(m, rho, vc_dim),
+    return doubling_sample_search_over_log2_prob_bound(
+        lambda m: compute_sauer_shelah_bound_log2(m, rho, vc_dim),
         success_prob
     ), conn_r
 
