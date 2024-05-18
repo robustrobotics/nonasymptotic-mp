@@ -121,8 +121,9 @@ def get_anytime_motion_fn(problem,
                           start_samples=10, 
                           end_samples=100, 
                           factor=1.5,
-                          holding=False,
                           adaptive_n=False,
+                          holding=False,
+                          
                           **kwargs):
     def test_holding(rover, q1, q2, obj):
         return test(rover, q1, q2, obj=obj)
@@ -175,7 +176,6 @@ def get_anytime_motion_fn(problem,
             num_samples = num_samples*factor
         
         
-        print("Q1: "+str(q1.values)+" Q2: "+str(q2.values))
         print("Path: "+str(path))
         if(len(path) == 0):
             print("Max samples reached")

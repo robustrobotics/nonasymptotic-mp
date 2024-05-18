@@ -8,11 +8,17 @@ import time
 import pybullet_tools.utils as pbu
 from pybullet_tools.kuka_primitives import TOOL_FRAMES, BodyPose, BodyConf, get_grasp_gen, \
     get_stable_gen, get_ik_fn, get_free_motion_gen, \
-    get_holding_motion_gen, Command, get_fixed_stable_gen
+    get_holding_motion_gen, Command, get_fixed_stable_gen, BodyPath
 from pddlstream.algorithms.meta import solve
 from pddlstream.language.generator import from_gen_fn, from_fn, from_test
 from pddlstream.utils import read, get_file_path, negate_test
+from separating_axis import vec_separating_axis_theorem, batch_oobb_to_polygons
 from pddlstream.language.constants import PDDLProblem
+import random
+from typing import List
+from nonasymptotic.bound import compute_numerical_bound
+from nonasymptotic.prm import SimpleNearestNeighborRadiusPRM
+from nonasymptotic.envs import Environment
 import os
 import argparse
 import pybullet as p
@@ -20,12 +26,160 @@ import copy
 import string
 import itertools
 from collections import namedtuple
+from tqdm import tqdm
 import numpy as np
 
 DEFAULT_ARM_POS = (0, 0, 0, 0, 0, 0, 0)
 Shape = namedtuple(
     "Shape", ["link", "index"]
 )
+
+class BagOfBoundingBoxes(Environment):
+
+    def __init__(self, seed, start_oobb:pbu.OOBB, end_oobb:pbu.OOBB, obstacle_oobbs:List[pbu.OOBB]):
+        self.obstacles = obstacle_oobbs
+        self.aabb = start_oobb.aabb
+        all_oobb_verts = [pbu.get_oobb_vertices(oobb) for oobb in self.obstacles+[start_oobb, end_oobb]]
+        print()
+        self.bounds = self.extents(itertools.chain(*all_oobb_verts))
+        obstacle_centers = np.array([oobb.pose[0] for oobb in obstacle_oobbs]).transpose(1,0)
+        obstacle_extents = np.array([pbu.get_aabb_extent(oobb.aabb) for oobb in obstacle_oobbs]).transpose(1,0)
+        obstacle_rotations = np.array([pbu.euler_from_quat(oobb.pose[1]) for oobb in obstacle_oobbs]).transpose(1,0)
+
+        print(obstacle_centers.shape)
+        print(obstacle_extents.shape)
+        print(obstacle_rotations.shape)
+        
+        self.polygons_obstacles = batch_oobb_to_polygons(obstacle_centers, obstacle_extents, obstacle_rotations)
+        import sys
+        sys.exit()
+        self.rng = np.random.default_rng(seed)
+
+    def extents(self, vertices):
+        # Unpack the vertices into separate lists for x, y, and z dimensions
+        x_coords, y_coords, z_coords = zip(*vertices)
+
+        # Calculate min and max along each dimension
+        min_x, max_x = min(x_coords), max(x_coords)
+        min_y, max_y = min(y_coords), max(y_coords)
+        min_z, max_z = min(z_coords), max(z_coords)
+        rote = np.pi/8.0
+        return ((min_x, max_x), (min_y, max_y), (min_z, max_z), (-rote, rote), (-rote, rote), (-rote, rote))
+
+    def sample_from_env(self):
+        return np.array([random.uniform(self.bounds[0][0], self.bounds[0][1]), 
+                         random.uniform(self.bounds[1][0], self.bounds[1][1])])
+
+    def arclength_to_curve_point(self, t_normed):
+        raise NotImplementedError
+
+    def is_motion_valid(self, start, goal):
+        valids = np.ones(start.shape[0]).astype(bool)
+        robot_start = np.tile(np.expand_dims(self.robot_verts, axis=0), (start.shape[0], 1, 1))
+        robot_goal = np.tile(np.expand_dims(self.robot_verts, axis=0), (start.shape[0], 1, 1))
+        num_steps = int(np.max(np.min(np.abs(robot_start-robot_goal), axis=1))/0.08)+2
+        alphas = np.linspace(0, 1, num_steps)
+        for obstacle_oobb, alpha in tqdm(list(itertools.product(self.obstacles, alphas))):
+            interm_verts = robot_start + alpha*(robot_goal-robot_start)
+            polygons_object = batch_oobb_to_polygons(centers_a, extents_a, rotations_a)
+            result = vec_separating_axis_theorem(polygons_a, polygons_b)
+
+            valids = valids & ~vec_separating_axis_theorem(interm_verts, np.tile(obstacle_hull, (interm_verts.shape[0], 1, 1)))
+        return valids.astype(bool)
+
+    def is_prm_epsilon_delta_complete(self, prm, tol):
+        raise NotImplementedError
+
+    def distance_to_path(self, points):
+        return np.zeros((points.shape[0], ))
+
+    @property
+    def volume(self):
+        raise NotImplementedError
+    
+def to_flat(pose):
+    return list(pose[0])+list(pbu.euler_from_quat(pose[1]))
+
+def to_pose(flat):
+    return pbu.Pose(pbu.Point(*flat[:3]), pbu.Euler(flat[3:]))
+
+def get_insert_motion_gen(robot, 
+                          body_aabb_map = {},
+                          body_obstacle_map = {},
+                          teleport=False, 
+                          self_collisions=True,
+                          start_samples=10, 
+                          end_samples=100, 
+                          factor=1.5,
+                          adaptive_n=False):
+    
+    def fn(conf1, conf2, body, grasp, fluents=[]):
+        
+        conf1.assign()
+        grasp.attachment().assign()
+        start_oobb = pbu.get_oobb(body)
+        conf2.assign()
+        grasp.attachment().assign()
+        end_oobb = pbu.get_oobb(body)
+
+        seed = 0
+        obstacle = body_obstacle_map[body]
+
+        obstacle_links = pbu.get_links(obstacle)
+        obstacle_oobbs = [pbu.get_oobb(obstacle, link=link) for link in obstacle_links]
+        
+        hallway_size = pbu.get_closest_points(obstacle, obstacle, obstacle_links[0], obstacle_links[1])
+        if(adaptive_n):
+            collision_buffer = 0.05
+            delta = hallway_size - (body_aabb_map[body].upper[0] - body_aabb_map[body].lower[0]) + collision_buffer
+            print("[Inside MP] delta: "+str(delta))
+            max_samples, _ = compute_numerical_bound(delta, 0.99, 16, 2, None)
+            min_samples = max_samples-1
+        else:
+            min_samples=start_samples
+            max_samples=end_samples
+        
+        print("[Inside MP] min_samples: "+str(min_samples))
+        print("[Inside MP] max_samples: "+str(max_samples))
+
+        prm_env_2d = BagOfBoundingBoxes(seed=seed, start_oobb= start_oobb, end_oobb = end_oobb, obstacle_oobbs=obstacle_oobbs)
+        prm = SimpleNearestNeighborRadiusPRM(32, 
+                                     prm_env_2d.is_motion_valid, 
+                                     prm_env_2d.sample_from_env, 
+                                     prm_env_2d.distance_to_path, 
+                                     seed=seed, verbose=False)
+        start_vec = np.expand_dims(to_flat(start_oobb.pose), axis=0)
+        end_vec = np.expand_dims(to_flat(end_oobb.pose), axis=0)
+        assert prm_env_2d.is_motion_valid(start_vec, start_vec), "Start in collision"
+        assert prm_env_2d.is_motion_valid(end_vec, end_vec), "Goal in collision"
+        
+        raise NotImplementedError
+        num_samples = min_samples
+        while(num_samples<max_samples+1):
+            print("Num samples: "+str(int(num_samples)))
+            prm.grow_to_n_samples(int(num_samples))
+            _, path = prm.query_best_solution(start, goal)
+            if(len(path)>0):
+                break
+            num_samples = num_samples*factor
+        
+        
+        print("Path: "+str(path))
+        if(len(path) == 0):
+            print("Max samples reached")
+            return None
+        else:
+            print("Found solution in")
+            print(num_samples)
+
+        path = np.concatenate([start_vec, path, end_vec], axis=0).tolist()
+        
+        command = Command(
+            [BodyPath(robot, path, joints=conf2.joints, attachments=[grasp])]
+        )
+        return (command,)
+
+    return fn
 
 def create_hollow_shapes(indices, width=0.30, length=0.4, height=0.15, thickness=0.01):
     assert len(indices) == 3
@@ -139,11 +293,16 @@ def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], f
     #         ('HandEmpty', ),
     # ]
 
+    body_aabb_map = {body: pbu.get_aabb(body) for body in movable}
+    body_obstacle_map = {body: sink for body, sink in zip(movable, sinks)}
 
     stream_map = {
         'plan-free-motion': from_fn(get_free_motion_gen(robot, fixed, teleport)),
         'plan-holding-motion': from_fn(get_holding_motion_gen(robot, fixed, teleport)),
-        'plan-insert-motion': from_fn(get_holding_motion_gen(robot, fixed, teleport)),
+        'plan-insert-motion': from_fn(get_insert_motion_gen(robot, 
+                                                            body_aabb_map=body_aabb_map, 
+                                                            body_obstacle_map = body_obstacle_map,
+                                                            teleport=teleport)),
     }
 
     print("Init: "+str(init))
