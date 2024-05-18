@@ -248,7 +248,8 @@ class SimpleFullConnRadiusPRM(SimplePRM):
         valid_motions = self.check_motion(self._samples[starts_in_range], self._samples[goals_in_range])
 
         master_graph = nk.Graph(n_samples, weighted=True)
-        for dist, start, goal in zip(dists_in_range[valid_motions],
+        valid_dists_in_range = dists_in_range[valid_motions]
+        for dist, start, goal in zip(valid_dists_in_range,
                                      starts_in_range[valid_motions],
                                      goals_in_range[valid_motions]):
             master_graph.addEdge(start, goal, w=dist, checkMultiEdge=True)
@@ -258,6 +259,8 @@ class SimpleFullConnRadiusPRM(SimplePRM):
 
         self._g_prm = master_graph
         self.max_conn_r = self.conn_r  # update max_conn_r to reflect rad of master graph.
+
+        return valid_dists_in_range
 
     def set_connection_radius(self, new_conn_r):
         # there may be a way to do this with networkit.sparsification, but I can't find it
