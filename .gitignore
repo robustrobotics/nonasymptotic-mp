@@ -250,5 +250,6 @@ exps/results/*
 # debugging efforts
 debug/
 paper/
+final_project/
 kgraph/
 .DS_Store
