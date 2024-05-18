@@ -32,7 +32,7 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
                                              env.distance_to_path,
                                              truncate_to_eff_rad=False,
                                              seed=rng_seed, verbose=True)
-    elif prm_type == 'radius':
+    else:
         prm = SimpleFullConnRadiusPRM(
             max_connections,
             env.is_motion_valid,
@@ -52,7 +52,7 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
             prm.grow_to_n_samples(n_samples)
             i_conn_lb = 3
             i_conn_ub = max_connections
-        elif prm_type == 'radius':
+        else:
             nn_rads = prm.grow_to_n_samples(n_samples)  # nn_rads is ordered ascending
             nn_rads = np.sort(nn_rads)
             i_conn_lb = 1
@@ -81,7 +81,7 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
             if prm_type == 'knn':
                 kn_test = i_conn_test
                 prm.set_nearest_neighbors(kn_test)
-            elif prm_type == 'radius':
+            else:
                 rad_test = nn_rads[i_conn_test]
                 prm.set_connection_radius(rad_test)
 
