@@ -31,7 +31,6 @@ def compute_sauer_shelah_bound_log2(m_samples, rho, vc_dim):
 
     log2_prob = math.log2(ss_comb_sum) + (-rho * m_samples / 2) + 1
     return log2_prob
-    # return 2 ** log2_prob
 
 
 def doubling_sample_search_over_log2_prob_bound(samples_to_log2_prob, success_prob):
