@@ -245,15 +245,19 @@ class SimpleFullConnRadiusPRM(SimplePRM):
         starts_in_range, goals_in_range = outer_loop_args[within_conn_r], inner_loop_args[within_conn_r]
         dists_in_range = dists[within_conn_r]
 
+        valid_motions = self.check_motion(self._samples[starts_in_range], self._samples[goals_in_range])
+
         master_graph = nk.Graph(n_samples, weighted=True)
-        for dist, start, goal in zip(dists_in_range, starts_in_range, goals_in_range):
+        for dist, start, goal in zip(dists_in_range[valid_motions],
+                                     starts_in_range[valid_motions],
+                                     goals_in_range[valid_motions]):
             master_graph.addEdge(start, goal, w=dist, checkMultiEdge=True)
 
         master_graph.indexEdges()
         nk.writeGraph(master_graph, self.tmp_graph_cache_path, nk.Format.NetworkitBinary)
 
         self._g_prm = master_graph
-        self.max_conn_r = self.conn_r # update max_conn_r to reflect rad of master graph.
+        self.max_conn_r = self.conn_r  # update max_conn_r to reflect rad of master graph.
 
     def set_connection_radius(self, new_conn_r):
         # there may be a way to do this with networkit.sparsification, but I can't find it
@@ -321,13 +325,15 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
     """
 
     def __init__(self, k_neighbors, motion_validity_checker, valid_state_sampler, sdf_to_path,
-                 seed=None, verbose=False):
+                 truncate_to_eff_rad=True, seed=None, verbose=False):
         super().__init__(motion_validity_checker, valid_state_sampler, seed, verbose)
 
         self.d = valid_state_sampler().size
+        self.max_k_neighbors = k_neighbors
         self.k_neighbors = k_neighbors
         self.conn_r = None
 
+        self.truncate_to_eff_rad = truncate_to_eff_rad
         self.certified_max_conn_r = None  # this is the maximal conn_r that we know will recapture the correct PRM graph
         self.dist_points_to_path = sdf_to_path
 
@@ -336,6 +342,9 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
 
         self._samples = None
         self._g_prm = None
+
+        self.master_edges = None
+        self.master_dists = None
 
         # create a temporary graph cache file
         self.tmp_graph_cache_path = os.path.join(self.temp_dir, str(uuid.uuid4()) + '.nkbg003')
@@ -380,8 +389,8 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
 
         # build the master graph
         ann_builder = get_ann(name="kgraph")  # will default to pynndescent if not available
-        edges, dists = ann_builder.new_graph_from_data(self._samples, effective_k)
-        master_graph = self._nn_edge_list_and_dist_list_to_nk_prm_graph(edges, dists)
+        self.master_edges, self.master_dists = ann_builder.new_graph_from_data(self._samples, effective_k)
+        master_graph = self._nn_edge_list_and_dist_list_to_nk_prm_graph(self.master_edges, self.master_dists)
         master_graph.indexEdges()
 
         # we'll save the master graph -- don't want to hold multiple PRMs in RAM.
@@ -390,7 +399,8 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
         # then write in the master graph.
         self._g_prm = master_graph
 
-        self.certified_max_conn_r = np.min(dists[:, -1])  # the closest kth neighbor makes the certified conn_r
+        self.certified_max_conn_r = np.min(
+            self.master_dists[:, -1])  # the closest kth neighbor makes the certified conn_r
         if self.verbose:
             print("Certified maximal correct connection radius: %f" % self.certified_max_conn_r)
 
@@ -402,12 +412,39 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
             self.g_sp_lookup, self.sample_to_lookup_ind = self._compute_spsp(samples_within_conn_r)
 
         # set the new connection radius
-        self.set_connection_radius(self.certified_max_conn_r)
+        if self.truncate_to_eff_rad:
+            self.set_connection_radius(self.certified_max_conn_r)
 
-        # returned the certified max and the neighbor dists (since they will be used in experiment runs)
-        # it's a bit of a kludge, but we return here so we do not need to duplicate the sorted dists
-        # (could make gigabytes of a difference)
-        return self.certified_max_conn_r, np.unique(dists, axis=None)
+            # returned the certified max and the neighbor dists (since they will be used in experiment runs)
+            # it's a bit of a kludge, but we return here so we do not need to duplicate the sorted dists
+            # (could make gigabytes of a difference)
+            return self.certified_max_conn_r, np.unique(self.master_dists, axis=None)
+
+    def set_nearest_neighbors(self, new_k_nearest_neighbors):
+        if new_k_nearest_neighbors > self.max_k_neighbors:
+            raise ArithmeticError('Cannot grow KNN PRM passed the original set number of neighbors.')
+
+        # if we need to grow the graph, then reload the master graph.
+        if new_k_nearest_neighbors > self.k_neighbors:
+            self._g_prm = nk.readGraph(self.tmp_graph_cache_path, nk.Format.NetworkitBinary)
+
+        # next, throw away edges we don't need.
+        throw_away_edge_list = self.master_edges[:, new_k_nearest_neighbors:]
+        for u, vs in enumerate(throw_away_edge_list):
+            for v in vs:
+                try:
+                    self._g_prm.removeEdge(u, v)
+                except RuntimeError:
+                    continue
+
+        self.k_neighbors = new_k_nearest_neighbors
+
+        if self.in_mp_exp_mode:
+            # recompute shortest paths over new graph and store their distances
+            n_samples = self._samples.shape[0]
+            dist_samples_to_line = self.dist_points_to_path(self._samples)
+            samples_within_conn_r = np.arange(n_samples)[dist_samples_to_line <= self.conn_r]
+            self.g_sp_lookup, self.sample_to_lookup_ind = self._compute_spsp(samples_within_conn_r)
 
     def set_connection_radius(self, new_conn_r):
         # there may be a way to do this with networkit.sparsification, but I can't find it
