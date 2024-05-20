@@ -1,5 +1,6 @@
 from sampler import random_point_in_mpolygon
-from bound import compute_rho, compute_numerical_bound
+from bound import compute_numerical_bound
+from util import detect_intersect
 
 from shapely.geometry import Polygon, MultiPolygon, MultiLineString, MultiPoint
 from shapely.plotting import plot_polygon, plot_points
@@ -113,3 +114,41 @@ class TestSauerShelah:
         no_tol_samples, _ = compute_numerical_bound(delta, 1.0 - 0.1, vol_env, dim, epsilon)
         loose_tol_samples, _ = compute_numerical_bound(delta, 1.0 - 0.1, vol_env, dim, 10)
         assert loose_tol_samples > no_tol_samples
+
+
+class TestIntersection:
+    def test_vert_hori_non_intersection(self):
+        s1e1 = np.array([[0.01, -0.05]])
+        s1e2 = np.array([[0.0, 0.05]])
+
+        s2e1 = np.array([[-0.5, 0.1]])
+        s2e2 = np.array([[0.5, 0.11]])
+
+        assert not detect_intersect(s1e1, s1e2, s2e1, s2e2)[0]
+
+    def test_vert_hori_intersection(self):
+        s1e1 = np.array([[-0.5, 0.1]])
+        s1e2 = np.array([[0.5, 0.1]])
+
+        s2e1 = np.array([[0.0, -0.05]])
+        s2e2 = np.array([[0.0, 0.15]])
+
+        assert detect_intersect(s1e1, s1e2, s2e1, s2e2)[0]
+
+    def test_vert_hori_flipped_non_intersection(self):
+        s1e1 = np.array([[-0.5, -0.1]])
+        s1e2 = np.array([[0.5, -0.1]])
+
+        s2e1 = np.array([[0.0, -0.05]])
+        s2e2 = np.array([[0.0, 0.15]])
+
+        assert not detect_intersect(s1e1, s1e2, s2e1, s2e2)[0]
+
+    def test_x_intersection(self):
+        s1e1 = np.array([[-0.5, -0.5]])
+        s1e2 = np.array([[0.5, 0.5]])
+
+        s2e1 = np.array([[0.5, -0.5]])
+        s2e2 = np.array([[-0.5, 0.5]])
+
+        assert detect_intersect(s1e1, s1e2, s2e1, s2e2)[0]

@@ -396,12 +396,12 @@ class NarrowPassage(Environment):
 
         # (see is motion valid for definition of lines)
         self.coll_lines = [
-            (np.array([-0.5, clearance]), np.array([-0.5, 0.5])),
-            (np.array([-0.5, -clearance]), np.array([-0.5, -0.5])),
-            (np.array([-0.5, clearance]), np.array([0.5, clearance])),
-            (np.array([-0.5, -clearance]), np.array([0.5, -clearance])),
-            (np.array([0.5, clearance]), np.array([0.5, 0.5])),
-            (np.array([0.5, -clearance]), np.array([0.5, -0.5])),
+            (np.array([[-0.5, clearance]]), np.array([[-0.5, 0.5]])),
+            (np.array([[-0.5, -clearance]]), np.array([[-0.5, -0.5]])),
+            (np.array([[-0.5, clearance]]), np.array([[0.5, clearance]])),
+            (np.array([[-0.5, -clearance]]), np.array([[0.5, -clearance]])),
+            (np.array([[0.5, clearance]]), np.array([[0.5, 0.5]])),
+            (np.array([[0.5, -clearance]]), np.array([[0.5, -0.5]])),
         ]
 
     def sample_from_env(self):
@@ -443,7 +443,7 @@ class NarrowPassage(Environment):
             for c_1, c_2 in self.coll_lines:
                 is_colliding = np.logical_or(is_colliding, detect_intersect(start_proj, goal_proj, c_1, c_2))
 
-        return is_colliding
+        return np.logical_not(is_colliding)
 
     def is_prm_epsilon_delta_complete(self, prm, tol):
         raise NotImplementedError

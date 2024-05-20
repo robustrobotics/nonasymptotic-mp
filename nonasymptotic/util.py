@@ -31,7 +31,7 @@ def detect_intersect(s1e1, s1e2, s2e1, s2e2):
     s2_dir = s2e2 - s2e1
 
     cross_dir = cross_2d(s1_dir, s2_dir)
-    intersect_coeff_unnormed1 = cross_2d(s2e1 - s2e1, s2_dir)
+    intersect_coeff_unnormed1 = cross_2d(s2e1 - s1e1, s2_dir)
     intersect_coeff_unnormed2 = cross_2d(s2e1 - s1e1, s1_dir)
 
     # then do some vectorized casework (we're really going to rely on some numpy ufunc stuff)
