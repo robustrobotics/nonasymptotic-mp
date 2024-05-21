@@ -53,11 +53,16 @@ class BagOfBoundingBoxes(Environment):
         min_x, max_x = min(x_coords), max(x_coords)
         min_y, max_y = min(y_coords), max(y_coords)
         min_z, max_z = min(z_coords), max(z_coords)
-        rote = np.pi/8.0
+        rote = np.pi/32.0
         return ((min_x, max_x), (min_y, max_y), (min_z, max_z), (-rote, rote), (-rote, rote), (-rote, rote))
 
     def sample_from_env(self):
         return np.array([random.uniform(self.bounds[i][0], self.bounds[i][1]) for i in range(len(self.bounds))])
+
+    def mc_cfree_est(self):
+        samples = np.stack([self.sample_from_env() for _ in range(1000)], axis=0)
+        return np.mean(self.is_motion_valid(samples, samples).astype(int))
+    
 
     def arclength_to_curve_point(self, t_normed):
         raise NotImplementedError
@@ -111,7 +116,6 @@ def get_insert_motion_gen(robot,
                           body_aabb_map = {},
                           body_obstacle_map = {},
                           teleport=False, 
-                          self_collisions=True,
                           start_samples=100, 
                           end_samples=1000, 
                           factor=1.5,
@@ -131,14 +135,26 @@ def get_insert_motion_gen(robot,
         # Subtract one wall from another
         WALL_LINK_1 = 0
         WALL_LINK_2 = 2
-        hallway_size = obstacle_oobbs[WALL_LINK_2][1][0]+obstacle_oobbs[WALL_LINK_2][0].upper[0] - \
-            obstacle_oobbs[WALL_LINK_1][1][0]+obstacle_oobbs[WALL_LINK_1][0].lower[0]
+        hallway_size = obstacle_oobbs[WALL_LINK_2][1][0][0]+obstacle_oobbs[WALL_LINK_2][0].upper[0] - \
+            obstacle_oobbs[WALL_LINK_1][1][0][0]+obstacle_oobbs[WALL_LINK_1][0].lower[0]
+
+        prm_env_2d = BagOfBoundingBoxes(seed=seed, start_oobb = start_oobb, end_oobb = end_oobb, obstacle_oobbs = obstacle_oobbs)
+        cspace_volume = 1
+        for bound in prm_env_2d.bounds:
+            cspace_volume *= (bound[1]-bound[0])
+
+        cfree_prop = prm_env_2d.mc_cfree_est()
+        cfree_volume = cfree_prop*cspace_volume
+
+        print("Total volume: "+str(cspace_volume))
+        print("Cree proportion: "+str(cfree_prop))
+        print("Cfree volume: "+str(cfree_volume))
         print("Hallway size: "+str(hallway_size))
+        collision_buffer = 0.01
+        delta = hallway_size - (body_aabb_map[body].upper[0] - body_aabb_map[body].lower[0])+collision_buffer
+        print("[Inside MP] delta: "+str(delta))
         if(adaptive_n):
-            collision_buffer = 0.05
-            delta = hallway_size - (body_aabb_map[body].upper[0] - body_aabb_map[body].lower[0]) + collision_buffer
-            print("[Inside MP] delta: "+str(delta))
-            max_samples, _ = compute_numerical_bound(delta, 0.99, 16, 2, None)
+            max_samples, _ = compute_numerical_bound(delta, 0.99, cfree_volume, 6, None)
             min_samples = max_samples-1
         else:
             min_samples=start_samples
@@ -147,7 +163,7 @@ def get_insert_motion_gen(robot,
         print("[Inside MP] min_samples: "+str(min_samples))
         print("[Inside MP] max_samples: "+str(max_samples))
 
-        prm_env_2d = BagOfBoundingBoxes(seed=seed, start_oobb= start_oobb, end_oobb = end_oobb, obstacle_oobbs=obstacle_oobbs)
+
         prm = SimpleNearestNeighborRadiusPRM(32, 
                                      prm_env_2d.is_motion_valid, 
                                      prm_env_2d.sample_from_env, 
@@ -255,7 +271,17 @@ def get_tool_link(robot):
     return pbu.link_from_name(robot, TOOL_FRAMES[pbu.get_body_name(robot)])
 
 
-def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], sink_obstacle_oobbs=[], fixed=[], teleport=False, grasp_name='top'):
+def pddlstream_from_problem(robot, names = {}, 
+                            placement_links=[], 
+                            movable=[], 
+                            sink_obstacle_oobbs=[], 
+                            fixed=[], 
+                            teleport=False, 
+                            min_samples=None, 
+                            max_samples=None, 
+                            factor=1.0, 
+                            adaptive_n=False, 
+                            grasp_name='top'):
     #assert (not are_colliding(tree, kin_cache))
 
     domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
@@ -345,6 +371,10 @@ def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], s
         'plan-insert-motion': from_fn(get_insert_motion_gen(robot, 
                                                             body_aabb_map=body_aabb_map, 
                                                             body_obstacle_map = body_obstacle_map,
+                                                            start_samples=min_samples, 
+                                                            end_samples=max_samples, 
+                                                            factor=factor, 
+                                                            adaptive_n=adaptive_n,
                                                             teleport=teleport)),
     }
 
@@ -440,21 +470,24 @@ def create_hollow(category, color=pbu.GREY, *args, **kwargs):
 def load_world(min_gap = 0.06):
 
     pbu.set_default_camera()
-    # pbu.draw_global_system()
     num_radish = 1
     radishes = []
-    
+    min_obj_size = 0.01
+    max_obj_width = 0.06
     with pbu.HideOutput():
         robot = pbu.load_model(pbu.DRAKE_IIWA_URDF, fixed_base=True)
         floor = pbu.load_model('models/short_floor.urdf')
-        # sink = pbu.load_model(pbu.SINK_URDF, pose=pbu.Pose(pbu.Point(x=-0.5)))
         stove = pbu.load_model(pbu.STOVE_URDF, pose=pbu.Pose(pbu.Point(x=+0.5)))
-        for _ in range(num_radish):
-            radishes.append(pbu.load_model(pbu.BLOCK_URDF, fixed_base=False))
+        for i in range(num_radish):
+            if(i>0):
+                u = np.random.uniform(0, 1)
+                obj_width = min_obj_size + (max_obj_width - min_obj_size) * (1 - (1 - u)**(1/4))
+            else:
+                obj_width = max_obj_width
+            radishes.append(pbu.create_box(obj_width, obj_width, 0.2, color=pbu.GREEN))
 
-   
-        container_width = 0.12 + min_gap
-        container_length = 0.12 + min_gap
+        container_width = 0.06 + min_gap
+        container_length = 0.06 + min_gap
         container_height = 0.15
         num_grid_x = 2
         num_grid_y = 4
@@ -517,19 +550,52 @@ def postprocess_plan(plan):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--min-samples', default=10, type=int, help='Max num samples for motion planning')
+    parser.add_argument('--max-samples', default=2000, type=int, help='Max num samples for motion planning')
+    parser.add_argument('--factor', default=1.1, type=int, help='The rate at which we geometrically expand from min-samples to max-samples')
+    parser.add_argument('--delta', default=0.05, type=float, help='Difference between the hallway width and the largest object that needs to fit thorugh the hallway')
+    parser.add_argument('--seed', default=-1, type=int, help='Seed for selection of robot size and collision placement')
     parser.add_argument('--save-dir', default="./logs/debug", type=str, help='Directory to save planning results')
+    parser.add_argument('--vis', action='store_true', help='GUI during planning')
+    parser.add_argument('--teleport', action='store_true', help='Teleports between configurations')
+    parser.add_argument('--randomize-delta', action='store_true', help='Teleports between configurations')
+    parser.add_argument('--num-targets', type=float, default=5, help='Number of objects to carry across the hallway')
+    parser.add_argument('--adaptive-n', action='store_true', help='Teleports between configurations')
+
     args = parser.parse_args()
     
     pbu.connect(use_gui=True)
     teleport = False
-    robot, names, movable, sink_obstacle_oobbs, fixed, placement_links = load_world()
+    robot, names, movable, sink_obstacle_oobbs, fixed, placement_links = load_world(min_gap=args.delta)
     print('Objects:', names)
 
     pbu.wait_if_gui()
 
     saver = pbu.WorldSaver()
 
-    problem = pddlstream_from_problem(robot, names=names, placement_links=placement_links, fixed=fixed, movable=movable, sink_obstacle_oobbs=sink_obstacle_oobbs, teleport=teleport)
+    max_samples = args.max_samples
+    min_samples = args.min_samples
+    
+    if(args.adaptive_n):
+        min_samples = max_samples-1
+    else:
+        min_samples = args.min_samples
+
+
+    print("Delta: "+str(args.delta))
+    print("Min samples: "+str(min_samples))
+    print("Max samples: "+str(max_samples))
+
+    problem = pddlstream_from_problem(robot, names=names, min_samples=min_samples, 
+                                      max_samples=max_samples, 
+                                      factor=args.factor, 
+                                      adaptive_n=args.adaptive_n, 
+                                      placement_links=placement_links, 
+                                      fixed=fixed, 
+                                      movable=movable, 
+                                      sink_obstacle_oobbs=sink_obstacle_oobbs, 
+                                      teleport=teleport)
+
 
     _, _, _, stream_map, init, goal = problem
     print('Init:', init)
