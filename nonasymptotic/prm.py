@@ -435,10 +435,8 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
         throw_away_edge_list = self.master_edges[:, new_k_nearest_neighbors:]
         for u, vs in enumerate(throw_away_edge_list):
             for v in vs:
-                try:
+                if self._g_prm.hasEdge(u, v):
                     self._g_prm.removeEdge(u, v)
-                except RuntimeError:
-                    continue
 
         self.k_neighbors = new_k_nearest_neighbors
 
