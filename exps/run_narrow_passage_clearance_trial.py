@@ -12,8 +12,8 @@ import json
 import sys
 import os
 
-from envs import NarrowPassage
-from prm import SimpleFullConnRadiusPRM, SimpleNearestNeighborRadiusPRM
+from nonasymptotic.envs import NarrowPassage
+from nonasymptotic.prm import SimpleFullConnRadiusPRM, SimpleNearestNeighborRadiusPRM
 
 
 def narrow_passage_clearance(delta_clear, dim, rng_seed,
@@ -54,7 +54,7 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
             i_conn_ub = max_connections
         else:
             nn_rads = prm.grow_to_n_samples(n_samples)  # nn_rads is ordered ascending
-            nn_rads = np.sort(nn_rads)
+            nn_rads = np.unique(nn_rads)
             i_conn_lb = 1
             i_conn_ub = nn_rads.size - 1  # we're sticking to integers so we can maximize code sharing
 
@@ -96,8 +96,8 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
         end_t = time.time()
         check_runtime = end_t - start_t
 
-        failed_conn = i_conn_lb
-        succeed_conn = i_conn_ub
+        failed_conn = i_conn_lb if prm_type == 'knn' else nn_rads[i_conn_lb]
+        succeed_conn = i_conn_ub if prm_type == 'knn' else nn_rads[i_conn_ub]
         result_record.append(
             (prm_type,
              dim,
@@ -118,7 +118,7 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
     print('Recording data and returning trial...')
     df_record = pd.DataFrame(result_record,
                              columns=[
-                                 'prm_type'
+                                 'prm_type',
                                  'dim',
                                  'delta_clearance',
                                  'n_samples',
@@ -170,7 +170,7 @@ else:
 for _prm_type, _clearance, _dim, _trial in tasks:
     print('initiating line trial dim: %f, trial%f' % (_dim, _trial))
     _sample_schedule = config['radius_sample_schedule'] if _prm_type == 'radius' else config['knn_sample_schedule']
-    _max_conn = config['radius_prm_max_radius'] if _prm_type == 'knn' else config['knn_prm_max_neighbors']
+    _max_conn = config['radius_prm_max_radius'] if _prm_type == 'radius' else config['knn_prm_max_neighbors']
     trial_record_df = narrow_passage_clearance(
         _clearance,
         _dim,
