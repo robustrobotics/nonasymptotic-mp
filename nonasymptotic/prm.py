@@ -60,7 +60,7 @@ class SimplePRM(ABC):
     def query_best_solution(self, start, goal):
         # NOTE: if there isn't a solution... will return an infinite distance. This is
         # just a quirk of networkit that we just need to work around.
-
+        
         # Returned path is excluding the endpoints
         # first, loop start and goal into graph
         start_nns_ids, start_nns_dists = self._query_samples(start)

@@ -12,12 +12,12 @@ from pybullet_tools.kuka_primitives import TOOL_FRAMES, BodyPose, BodyConf, get_
 from pddlstream.algorithms.meta import solve
 from pddlstream.language.generator import from_gen_fn, from_fn, from_test
 from pddlstream.utils import read, get_file_path, negate_test
-from separating_axis import vec_separating_axis_theorem, batch_oobb_to_polygons
+from separating_axis import OBB, separating_axis_theorem
 from pddlstream.language.constants import PDDLProblem
 import random
 from typing import List
 from nonasymptotic.bound import compute_numerical_bound
-from nonasymptotic.prm import SimpleNearestNeighborRadiusPRM
+from nonasymptotic.prm import SimpleNearestNeighborRadiusPRM, SimplePRM
 from nonasymptotic.envs import Environment
 import os
 import argparse
@@ -34,25 +34,15 @@ Shape = namedtuple(
     "Shape", ["link", "index"]
 )
 
+
 class BagOfBoundingBoxes(Environment):
 
     def __init__(self, seed, start_oobb:pbu.OOBB, end_oobb:pbu.OOBB, obstacle_oobbs:List[pbu.OOBB]):
-        self.obstacles = obstacle_oobbs
+        self.obstacle_oobbs = obstacle_oobbs
         self.aabb = start_oobb.aabb
-        all_oobb_verts = [pbu.get_oobb_vertices(oobb) for oobb in self.obstacles+[start_oobb, end_oobb]]
-        print()
+        all_oobb_verts = [pbu.get_oobb_vertices(oobb) for oobb in self.obstacle_oobbs+[start_oobb, end_oobb]]
         self.bounds = self.extents(itertools.chain(*all_oobb_verts))
-        obstacle_centers = np.array([oobb.pose[0] for oobb in obstacle_oobbs]).transpose(1,0)
-        obstacle_extents = np.array([pbu.get_aabb_extent(oobb.aabb) for oobb in obstacle_oobbs]).transpose(1,0)
-        obstacle_rotations = np.array([pbu.euler_from_quat(oobb.pose[1]) for oobb in obstacle_oobbs]).transpose(1,0)
-
-        print(obstacle_centers.shape)
-        print(obstacle_extents.shape)
-        print(obstacle_rotations.shape)
-        
-        self.polygons_obstacles = batch_oobb_to_polygons(obstacle_centers, obstacle_extents, obstacle_rotations)
-        import sys
-        sys.exit()
+        print("Bounds: "+str(self.bounds))
         self.rng = np.random.default_rng(seed)
 
     def extents(self, vertices):
@@ -67,24 +57,38 @@ class BagOfBoundingBoxes(Environment):
         return ((min_x, max_x), (min_y, max_y), (min_z, max_z), (-rote, rote), (-rote, rote), (-rote, rote))
 
     def sample_from_env(self):
-        return np.array([random.uniform(self.bounds[0][0], self.bounds[0][1]), 
-                         random.uniform(self.bounds[1][0], self.bounds[1][1])])
+        return np.array([random.uniform(self.bounds[i][0], self.bounds[i][1]) for i in range(len(self.bounds))])
 
     def arclength_to_curve_point(self, t_normed):
         raise NotImplementedError
 
+    def print_pose(self, pose):
+        return "{}, {}".format(pose[0], pbu.euler_from_quat(pose[1]))
+    
     def is_motion_valid(self, start, goal):
         valids = np.ones(start.shape[0]).astype(bool)
-        robot_start = np.tile(np.expand_dims(self.robot_verts, axis=0), (start.shape[0], 1, 1))
-        robot_goal = np.tile(np.expand_dims(self.robot_verts, axis=0), (start.shape[0], 1, 1))
-        num_steps = int(np.max(np.min(np.abs(robot_start-robot_goal), axis=1))/0.08)+2
-        alphas = np.linspace(0, 1, num_steps)
-        for obstacle_oobb, alpha in tqdm(list(itertools.product(self.obstacles, alphas))):
-            interm_verts = robot_start + alpha*(robot_goal-robot_start)
-            polygons_object = batch_oobb_to_polygons(centers_a, extents_a, rotations_a)
-            result = vec_separating_axis_theorem(polygons_a, polygons_b)
+        obb_interps = []
 
-            valids = valids & ~vec_separating_axis_theorem(interm_verts, np.tile(obstacle_hull, (interm_verts.shape[0], 1, 1)))
+        for i in range(start.shape[0]):
+            start_pose = pbu.Pose(pbu.Point(*start[i, :3]), pbu.Euler(*start[i, 3:]))
+            end_pose = pbu.Pose(pbu.Point(*goal[i, :3]), pbu.Euler(*goal[i, 3:]))
+            interpolated = pbu.interpolate_poses(start_pose, end_pose, num_steps=5)
+            # print("Start pose: "+str(self.print_pose(start_pose)))
+            # print("End pose: "+str(self.print_pose(end_pose)))
+            # print("Interpolations: "+str([self.print_pose(poi) for poi in interpolated]))
+            obb_interp = []
+            for interp_pose in interpolated:
+                oobb = pbu.OOBB(self.aabb, interp_pose)
+                obb_interp.append(OBB.from_oobb(oobb).to_vectorized())
+            obb_interps.append(obb_interp)
+
+        interp_stacks = [np.stack([obb_interps[i][interp_idx] for i in range(start.shape[0])], axis=0) for interp_idx in range(len(obb_interps[0]))]
+        
+        for obstacle_oobb in self.obstacle_oobbs:
+            obstacle_stack = np.tile(OBB.from_oobb(obstacle_oobb).to_vectorized(), (start.shape[0], 1))
+            for interp_stack in interp_stacks:
+                valids = valids & ~separating_axis_theorem(obstacle_stack, interp_stack)
+
         return valids.astype(bool)
 
     def is_prm_epsilon_delta_complete(self, prm, tol):
@@ -108,8 +112,8 @@ def get_insert_motion_gen(robot,
                           body_obstacle_map = {},
                           teleport=False, 
                           self_collisions=True,
-                          start_samples=10, 
-                          end_samples=100, 
+                          start_samples=100, 
+                          end_samples=1000, 
                           factor=1.5,
                           adaptive_n=False):
     
@@ -123,12 +127,13 @@ def get_insert_motion_gen(robot,
         end_oobb = pbu.get_oobb(body)
 
         seed = 0
-        obstacle = body_obstacle_map[body]
-
-        obstacle_links = pbu.get_links(obstacle)
-        obstacle_oobbs = [pbu.get_oobb(obstacle, link=link) for link in obstacle_links]
-        
-        hallway_size = pbu.get_closest_points(obstacle, obstacle, obstacle_links[0], obstacle_links[1])
+        obstacle_oobbs = body_obstacle_map[body]
+        # Subtract one wall from another
+        WALL_LINK_1 = 0
+        WALL_LINK_2 = 2
+        hallway_size = obstacle_oobbs[WALL_LINK_2][1][0]+obstacle_oobbs[WALL_LINK_2][0].upper[0] - \
+            obstacle_oobbs[WALL_LINK_1][1][0]+obstacle_oobbs[WALL_LINK_1][0].lower[0]
+        print("Hallway size: "+str(hallway_size))
         if(adaptive_n):
             collision_buffer = 0.05
             delta = hallway_size - (body_aabb_map[body].upper[0] - body_aabb_map[body].lower[0]) + collision_buffer
@@ -153,12 +158,34 @@ def get_insert_motion_gen(robot,
         assert prm_env_2d.is_motion_valid(start_vec, start_vec), "Start in collision"
         assert prm_env_2d.is_motion_valid(end_vec, end_vec), "Goal in collision"
         
-        raise NotImplementedError
+
         num_samples = min_samples
         while(num_samples<max_samples+1):
             print("Num samples: "+str(int(num_samples)))
             prm.grow_to_n_samples(int(num_samples))
-            _, path = prm.query_best_solution(start, goal)
+
+            # import matplotlib.pyplot as plt
+            # plt.figure()
+
+            # # plot the existing prm
+            # xdim = 0
+            # ydim = 2
+            # for u, v in prm.prm_graph.iterEdges():
+            #     coords_u = prm.prm_samples[u]
+            #     coords_v = prm.prm_samples[v]
+
+            #     plt.plot([coords_u[xdim], coords_v[xdim]], [coords_u[ydim], coords_v[ydim]], 'ro-')
+
+            # plt.plot([start_vec[0][xdim], end_vec[0][xdim]], [start_vec[0][ydim], end_vec[0][ydim]], 'go-')
+
+            # plt.plot()
+            # plt.show()
+            print('N nodes: %i' % prm.num_vertices())
+            print('N edges: %i' % prm.num_edges())
+
+            print("Start: "+str(start_vec))
+            print("End: "+str(end_vec))
+            _, path = prm.query_best_solution(start_vec, end_vec)
             if(len(path)>0):
                 break
             num_samples = num_samples*factor
@@ -172,10 +199,23 @@ def get_insert_motion_gen(robot,
             print("Found solution in")
             print(num_samples)
 
-        path = np.concatenate([start_vec, path, end_vec], axis=0).tolist()
         
+        print("Enumerating path:")
+        whole_path = start_vec.tolist()+path.tolist()+end_vec.tolist()
+        conf_path = []
+        for el in whole_path:
+            pose = pbu.Pose(pbu.Point(*el[:3]), pbu.Euler(*el[3:]))
+            pbu.set_pose(body, pose)
+            pbu.wait_if_gui()
+            body_pose = BodyPose(body, pose)
+            conf = get_ik_fn(robot, body, body_pose, grasp, randomize=False, teleport=teleport)
+            conf_path.append(conf.values)
+            conf_joints = conf.joints
+            grasp.assign()
+            pbu.wait_if_gui()
+
         command = Command(
-            [BodyPath(robot, path, joints=conf2.joints, attachments=[grasp])]
+            [BodyPath(robot, conf_path, joints=conf_joints, attachments=[grasp])]
         )
         return (command,)
 
@@ -190,6 +230,7 @@ def create_hollow_shapes(indices, width=0.30, length=0.4, height=0.15, thickness
     # TODO: no way to programmatically set the name of the geoms or links
     # TODO: rigid links version of this
     shapes = []
+    obstacle_oobbs = []
     for index, signs in enumerate(indices):
         link_dims = np.array(dims)
         link_dims[index] = thickness
@@ -201,7 +242,9 @@ def create_hollow_shapes(indices, width=0.30, length=0.4, height=0.15, thickness
             link_center[index] += sign * (dims[index] - thickness) / 2.0
             pose = pbu.Pose(point=link_center)
             shapes.append((name, geom, pose))
-    return shapes
+            link_aabb = pbu.AABB(lower=-np.array(geom["halfExtents"]), upper=np.array(geom["halfExtents"]))
+            obstacle_oobbs.append(pbu.OOBB(link_aabb, pose))
+    return shapes, obstacle_oobbs
 
 def get_fixed(robot, movable):
     rigid = [body for body in pbu.get_bodies() if body != robot]
@@ -212,7 +255,7 @@ def get_tool_link(robot):
     return pbu.link_from_name(robot, TOOL_FRAMES[pbu.get_body_name(robot)])
 
 
-def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], fixed=[], teleport=False, grasp_name='top'):
+def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], sink_obstacle_oobbs=[], fixed=[], teleport=False, grasp_name='top'):
     #assert (not are_colliding(tree, kin_cache))
 
     domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
@@ -253,7 +296,7 @@ def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], f
                     init += [('Supported', body, pose, surface)]
                 
 
-    assert len(movable) == len(sinks)
+    # assert len(movable) == len(sinks)
     for body, sink in zip(movable, sinks):
         stable_gen = get_fixed_stable_gen(fixed, placement_links)
         grasp = body_to_grasp[body]
@@ -294,7 +337,7 @@ def pddlstream_from_problem(robot, names = {}, placement_links=[], movable=[], f
     # ]
 
     body_aabb_map = {body: pbu.get_aabb(body) for body in movable}
-    body_obstacle_map = {body: sink for body, sink in zip(movable, sinks)}
+    body_obstacle_map = {body: sink_oobbs for body, sink_oobbs in zip(movable, sink_obstacle_oobbs)}
 
     stream_map = {
         'plan-free-motion': from_fn(get_free_motion_gen(robot, fixed, teleport)),
@@ -383,21 +426,22 @@ def create_link_body(geoms, poses, colors=None):
     return base_body
 
 
+
 def create_hollow(category, color=pbu.GREY, *args, **kwargs):
     indices = SHAPE_INDICES[category]
-    shapes = create_hollow_shapes(indices, *args, **kwargs)
+    shapes, obstacle_oobbs = create_hollow_shapes(indices, *args, **kwargs)
     print(shapes)
     name, geoms, poses = zip(*shapes)
     colors = len(shapes) * [color]
     body = create_link_body(geoms, poses)
-    return body
+    return body, obstacle_oobbs
 
 
-def load_world():
+def load_world(min_gap = 0.06):
 
     pbu.set_default_camera()
     # pbu.draw_global_system()
-    num_radish = 3
+    num_radish = 1
     radishes = []
     
     with pbu.HideOutput():
@@ -408,19 +452,30 @@ def load_world():
         for _ in range(num_radish):
             radishes.append(pbu.load_model(pbu.BLOCK_URDF, fixed_base=False))
 
-        container_width = 0.20
-        container_length = 0.20
+   
+        container_width = 0.12 + min_gap
+        container_length = 0.12 + min_gap
         container_height = 0.15
-        num_grid_x = 1
-        num_grid_y = 3
+        num_grid_x = 2
+        num_grid_y = 4
         bin_grid_x = [i*container_width for i in range(num_grid_x)]
         bin_grid_y = [i*container_length for i in range(num_grid_y)]
-        bin_center = (-0.68, -container_width/2.0)
+        bin_center = (-0.68, -(container_length*(num_grid_y-1))/2.0)
         bins = []
+        sink_obstacle_oobbs = []
         for bin_pos in itertools.product(bin_grid_x, bin_grid_y):
-            new_bin = create_hollow("bin", width=container_width, length=container_length, height = container_height)
+            new_bin, local_obstacle_oobbs = create_hollow("bin", width=container_width, length=container_length, height = container_height)
+            
             bins.append(new_bin)
-            pbu.set_pose(new_bin, pbu.Pose(pbu.Point(x=bin_pos[0]+bin_center[0], y=bin_pos[1]+bin_center[1])))
+            bin_pose = pbu.Pose(pbu.Point(x=bin_pos[0]+bin_center[0], y=bin_pos[1]+bin_center[1]))
+            obstacle_oobbs = []
+            for local_oobb in local_obstacle_oobbs:
+                # print(local_oobb[1])
+                new_pose = pbu.multiply(bin_pose, local_oobb[1])
+                new_oobb = pbu.OOBB(local_oobb[0], new_pose)
+                obstacle_oobbs.append(new_oobb)
+            sink_obstacle_oobbs.append(obstacle_oobbs)
+            pbu.set_pose(new_bin, bin_pose)
 
     # pbu.draw_pose(pbu.Pose(), parent=robot, parent_link=get_tool_link(robot))
 
@@ -449,14 +504,8 @@ def load_world():
             conf =  get_ik_fn(robot, radish, pose, grasp, fixed=fixed, teleport=False)
             if(conf is not None):
                 placed.append(radish)
-                break
-            
-
-
-
-
-   
-    return robot, body_names, movable_bodies, fixed, placement_links
+                break   
+    return robot, body_names, movable_bodies, sink_obstacle_oobbs, fixed, placement_links
 
 def postprocess_plan(plan):
     paths = []
@@ -473,14 +522,14 @@ def main():
     
     pbu.connect(use_gui=True)
     teleport = False
-    robot, names, movable, fixed, placement_links = load_world()
+    robot, names, movable, sink_obstacle_oobbs, fixed, placement_links = load_world()
     print('Objects:', names)
 
     pbu.wait_if_gui()
 
     saver = pbu.WorldSaver()
 
-    problem = pddlstream_from_problem(robot, names=names, placement_links=placement_links, fixed=fixed, movable=movable, teleport=teleport)
+    problem = pddlstream_from_problem(robot, names=names, placement_links=placement_links, fixed=fixed, movable=movable, sink_obstacle_oobbs=sink_obstacle_oobbs, teleport=teleport)
 
     _, _, _, stream_map, init, goal = problem
     print('Init:', init)

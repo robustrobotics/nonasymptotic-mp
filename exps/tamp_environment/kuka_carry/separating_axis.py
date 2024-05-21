@@ -1,4 +1,5 @@
 import numpy as np
+import pybullet_tools.utils as pbu
 
 def separating_axis_theorem(boxes1, boxes2):
     # Extract center, half-extents, and orientation from the vectorized representations
@@ -59,6 +60,11 @@ class OBB:
     def to_vectorized(self):
         vectorized = np.concatenate([self.center, self.half_extents, self.orientation.flatten()])
         return vectorized
+
+    @staticmethod
+    def from_oobb(oobb:pbu.OOBB):
+        aabb, pose = oobb
+        return OBB(center=pose[0], half_extents=pbu.get_aabb_extent(aabb)/2.0, orientation=pbu.matrix_from_quat(pose[1]))
 
 
 if __name__=='__main__':
