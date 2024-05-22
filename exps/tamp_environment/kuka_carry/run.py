@@ -565,7 +565,8 @@ def main():
     parser.add_argument('--adaptive-n', action='store_true', help='Teleports between configurations')
 
     args = parser.parse_args()
-    
+    print("Experiment arguments:")
+    print(vars(args))
     pbu.connect(use_gui=args.vis)
     teleport = False
     robot, names, movable, sink_obstacle_oobbs, fixed, placement_links = load_world(min_gap=args.delta)
@@ -587,14 +588,15 @@ def main():
     print("Delta: "+str(args.delta))
     print("Min samples: "+str(min_samples))
     print("Max samples: "+str(max_samples))
-
+    
     problem = pddlstream_from_problem(robot, names=names, min_samples=min_samples, 
                                       max_samples=max_samples, 
                                       factor=args.factor, 
                                       adaptive_n=args.adaptive_n, 
                                       placement_links=placement_links, 
                                       fixed=fixed, 
-                                      movable=movable, 
+                                      movable=movable,
+                            
                                       sink_obstacle_oobbs=sink_obstacle_oobbs, 
                                       teleport=teleport)
 
@@ -605,10 +607,12 @@ def main():
     print('Streams:', pbu.str_from_object(set(stream_map)))
     save_dir = os.path.join(args.save_dir, str(time.time()))
     os.makedirs(os.path.join(save_dir, "pddl"))
+    st = time.time()
     with pbu.Profiler():
-        solution = solve(problem, algorithm="adaptive", unit_costs=False, success_cost=pbu.INF, temp_dir=os.path.join(save_dir, "pddl"))
+        solution = solve(problem, algorithm="adaptive", unit_costs=False, verbose=True, success_cost=pbu.INF, temp_dir=os.path.join(save_dir, "pddl"))
         saver.restore()
 
+    print("Time: "+str(time.time()-st))
     plan, cost, evaluations = solution
     if (plan is None) or not pbu.has_gui():
         pbu.disconnect()

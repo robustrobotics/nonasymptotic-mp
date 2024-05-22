@@ -1,7 +1,7 @@
 import time
 from itertools import count
 
-from pybullet_tools.pr2_utils import get_top_grasps
+from pybullet_tools.pr2_utils import get_top_grasps, TOOL_POSE, GRASP_LENGTH, MAX_GRASP_WIDTH
 from pybullet_tools.utils import (
     INF,
     Attachment,
@@ -40,11 +40,36 @@ from pybullet_tools.utils import (
     get_aabb,
     get_link_pose,
     quat_from_euler,
-    Euler
+    Euler,
+    multiply,
+    point_from_pose,
+    approximate_as_prism,
+    unit_pose
 )
+import math
 import numpy as np
 import random
 # TODO: deprecate
+
+def get_top_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
+                   max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
+    # TODO: rename the box grasps
+    center, (w, l, h) = approximate_as_prism(body, body_pose=body_pose)
+    reflect_z = Pose(euler=[0, math.pi, 0])
+    translate_z = Pose(point=[0, 0, h / 2 - grasp_length])
+    translate_center = Pose(point=point_from_pose(body_pose)-center)
+    grasps = []
+    if w <= max_width:
+        for i in range(1 + under):
+            rotate_z = Pose(euler=[0, 0, math.pi / 2 + i * math.pi])
+            grasps += [multiply(tool_pose, translate_z, rotate_z,
+                                reflect_z, translate_center, body_pose)]
+    if l <= max_width:
+        for i in range(1 + under):
+            rotate_z = Pose(euler=[0, 0, i * math.pi])
+            grasps += [multiply(tool_pose, translate_z, rotate_z,
+                                reflect_z, translate_center, body_pose)]
+    return grasps
 
 GRASP_INFO = {
     "top": GraspInfo(
