@@ -499,41 +499,40 @@ def load_world(min_gap = 0.06):
     radishes = []
     min_obj_size = 0.01
     max_obj_width = 0.06
-    with pbu.HideOutput():
-        robot = pbu.load_model(pbu.DRAKE_IIWA_URDF, fixed_base=True)
-        floor = pbu.load_model('models/short_floor.urdf')
-        stove = pbu.load_model(pbu.STOVE_URDF, pose=pbu.Pose(pbu.Point(x=+0.5)))
-        for i in range(num_radish):
-            if(i>0):
-                u = np.random.uniform(0, 1)
-                obj_width = min_obj_size + (max_obj_width - min_obj_size) * (1 - (1 - u)**(1/4))
-            else:
-                obj_width = max_obj_width
-            radishes.append(pbu.create_box(obj_width, obj_width, 0.2, color=pbu.GREEN))
+    robot = pbu.load_model(pbu.DRAKE_IIWA_URDF, fixed_base=True)
+    floor = pbu.load_model('models/short_floor.urdf')
+    stove = pbu.load_model(pbu.STOVE_URDF, pose=pbu.Pose(pbu.Point(x=+0.5)))
+    for i in range(num_radish):
+        if(i>0):
+            u = np.random.uniform(0, 1)
+            obj_width = min_obj_size + (max_obj_width - min_obj_size) * (1 - (1 - u)**(1/4))
+        else:
+            obj_width = max_obj_width
+        radishes.append(pbu.create_box(obj_width, obj_width, 0.2, color=pbu.GREEN))
 
-        container_width = 0.06 + min_gap
-        container_length = 0.06 + min_gap
-        container_height = 0.15
-        num_grid_x = 2
-        num_grid_y = 4
-        bin_grid_x = [i*container_width for i in range(num_grid_x)]
-        bin_grid_y = [i*container_length for i in range(num_grid_y)]
-        bin_center = (-0.68, -(container_length*(num_grid_y-1))/2.0)
-        bins = []
-        sink_obstacle_oobbs = []
-        for bin_pos in itertools.product(bin_grid_x, bin_grid_y):
-            new_bin, local_obstacle_oobbs = create_hollow("bin", width=container_width, length=container_length, height = container_height)
-            
-            bins.append(new_bin)
-            bin_pose = pbu.Pose(pbu.Point(x=bin_pos[0]+bin_center[0], y=bin_pos[1]+bin_center[1]))
-            obstacle_oobbs = []
-            for local_oobb in local_obstacle_oobbs:
-                # print(local_oobb[1])
-                new_pose = pbu.multiply(bin_pose, local_oobb[1])
-                new_oobb = pbu.OOBB(local_oobb[0], new_pose)
-                obstacle_oobbs.append(new_oobb)
-            sink_obstacle_oobbs.append(obstacle_oobbs)
-            pbu.set_pose(new_bin, bin_pose)
+    container_width = 0.06 + min_gap
+    container_length = 0.06 + min_gap
+    container_height = 0.15
+    num_grid_x = 2
+    num_grid_y = 4
+    bin_grid_x = [i*container_width for i in range(num_grid_x)]
+    bin_grid_y = [i*container_length for i in range(num_grid_y)]
+    bin_center = (-0.68, -(container_length*(num_grid_y-1))/2.0)
+    bins = []
+    sink_obstacle_oobbs = []
+    for bin_pos in itertools.product(bin_grid_x, bin_grid_y):
+        new_bin, local_obstacle_oobbs = create_hollow("bin", width=container_width, length=container_length, height = container_height)
+        
+        bins.append(new_bin)
+        bin_pose = pbu.Pose(pbu.Point(x=bin_pos[0]+bin_center[0], y=bin_pos[1]+bin_center[1]))
+        obstacle_oobbs = []
+        for local_oobb in local_obstacle_oobbs:
+            # print(local_oobb[1])
+            new_pose = pbu.multiply(bin_pose, local_oobb[1])
+            new_oobb = pbu.OOBB(local_oobb[0], new_pose)
+            obstacle_oobbs.append(new_oobb)
+        sink_obstacle_oobbs.append(obstacle_oobbs)
+        pbu.set_pose(new_bin, bin_pose)
 
     # pbu.draw_pose(pbu.Pose(), parent=robot, parent_link=get_tool_link(robot))
 
@@ -572,7 +571,19 @@ def postprocess_plan(plan):
             paths += args[-1].body_paths
     return Command(paths)
 
+class StreamToLogger:
+    def __init__(self, logger, log_level):
+        self.logger = logger
+        self.log_level = log_level
+        self.linebuf = ""
 
+    def write(self, buf):
+        for line in buf.rstrip().splitlines():
+            self.logger.log(self.log_level, line.rstrip())
+
+    def flush(self):
+        pass
+    
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--min-samples', default=500, type=int, help='Max num samples for motion planning')
@@ -589,6 +600,8 @@ def main():
 
     args = parser.parse_args()
 
+    pbu.connect(use_gui=args.vis)
+    
     save_dir = os.path.join(args.save_dir, str(time.time()))
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -600,7 +613,7 @@ def main():
     print(vars(args))
     
 
-    pbu.connect(use_gui=args.vis)
+    
     teleport = False
     robot, names, movable, sink_obstacle_oobbs, fixed, placement_links = load_world(min_gap=args.delta)
     print('Objects:', names)
