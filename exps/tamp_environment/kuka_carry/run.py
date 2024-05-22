@@ -6,7 +6,7 @@ sys.path.extend(["./pddlstream"])
 
 import time
 import pybullet_tools.utils as pbu
-from pybullet_tools.kuka_primitives import TOOL_FRAMES, BodyPose, BodyConf, get_grasp_gen, \
+from kuka_primitives import TOOL_FRAMES, BodyPose, BodyConf, get_grasp_gen, \
     get_stable_gen, get_ik_fn, get_free_motion_gen, \
     get_holding_motion_gen, Command, get_fixed_stable_gen, BodyPath
 from pddlstream.algorithms.meta import solve
@@ -566,7 +566,7 @@ def main():
 
     args = parser.parse_args()
     
-    pbu.connect(use_gui=True)
+    pbu.connect(use_gui=args.vis)
     teleport = False
     robot, names, movable, sink_obstacle_oobbs, fixed, placement_links = load_world(min_gap=args.delta)
     print('Objects:', names)
