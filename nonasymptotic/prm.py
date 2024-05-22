@@ -272,8 +272,8 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
         self._g_prm = master_graph
 
         self.certified_max_conn_r = np.min(dists[:, -1])  # the closest kth neighbor makes the certified conn_r
-        if self.verbose:
-            print("Certified maximal correct connection radius: %f" % self.certified_max_conn_r)
+        
+        print("Certified maximal correct connection radius: %f" % self.certified_max_conn_r)
 
         # NOT true Knn from points on line, but not important for us
         if self.in_mp_exp_mode:

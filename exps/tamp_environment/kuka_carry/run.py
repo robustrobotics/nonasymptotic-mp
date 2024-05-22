@@ -40,7 +40,7 @@ class BagOfBoundingBoxes(Environment):
     def __init__(self, seed, start_oobb:pbu.OOBB, end_oobb:pbu.OOBB, obstacle_oobbs:List[pbu.OOBB]):
         self.obstacle_oobbs = obstacle_oobbs
         self.aabb = start_oobb.aabb
-        all_oobb_verts = [pbu.get_oobb_vertices(oobb) for oobb in self.obstacle_oobbs+[start_oobb, end_oobb]]
+        all_oobb_verts = [pbu.get_oobb_vertices(oobb) for oobb in self.obstacle_oobbs]+[[start_oobb[1][0]]]
         self.bounds = self.extents(itertools.chain(*all_oobb_verts))
         print("Bounds: "+str(self.bounds))
         self.rng = np.random.default_rng(seed)
@@ -60,7 +60,7 @@ class BagOfBoundingBoxes(Environment):
         return np.array([random.uniform(self.bounds[i][0], self.bounds[i][1]) for i in range(len(self.bounds))])
 
     def mc_cfree_est(self):
-        samples = np.stack([self.sample_from_env() for _ in range(1000)], axis=0)
+        samples = np.stack([self.sample_from_env() for _ in range(10000)], axis=0)
         return np.mean(self.is_motion_valid(samples, samples).astype(int))
     
 
@@ -73,26 +73,26 @@ class BagOfBoundingBoxes(Environment):
     def is_motion_valid(self, start, goal):
         valids = np.ones(start.shape[0]).astype(bool)
         obb_interps = []
-
+        # print(start.shape[0])
+        num_steps = int(np.max(np.linalg.norm(start-goal, axis=1))/0.03)
+        # st = time.time()
         for i in range(start.shape[0]):
             start_pose = pbu.Pose(pbu.Point(*start[i, :3]), pbu.Euler(*start[i, 3:]))
             end_pose = pbu.Pose(pbu.Point(*goal[i, :3]), pbu.Euler(*goal[i, 3:]))
-            interpolated = pbu.interpolate_poses(start_pose, end_pose, num_steps=5)
-            # print("Start pose: "+str(self.print_pose(start_pose)))
-            # print("End pose: "+str(self.print_pose(end_pose)))
-            # print("Interpolations: "+str([self.print_pose(poi) for poi in interpolated]))
+            interpolated = pbu.interpolate_poses(start_pose, end_pose, num_steps=num_steps+2)
             obb_interp = []
             for interp_pose in interpolated:
                 oobb = pbu.OOBB(self.aabb, interp_pose)
                 obb_interp.append(OBB.from_oobb(oobb).to_vectorized())
             obb_interps.append(obb_interp)
-
+        # print(time.time()-st)
         interp_stacks = [np.stack([obb_interps[i][interp_idx] for i in range(start.shape[0])], axis=0) for interp_idx in range(len(obb_interps[0]))]
-        
+        # st = time.time()
         for obstacle_oobb in self.obstacle_oobbs:
             obstacle_stack = np.tile(OBB.from_oobb(obstacle_oobb).to_vectorized(), (start.shape[0], 1))
             for interp_stack in interp_stacks:
                 valids = valids & ~separating_axis_theorem(obstacle_stack, interp_stack)
+        # print(time.time()-st)
 
         return valids.astype(bool)
 
@@ -142,19 +142,17 @@ def get_insert_motion_gen(robot,
         cspace_volume = 1
         for bound in prm_env_2d.bounds:
             cspace_volume *= (bound[1]-bound[0])
-
-        cfree_prop = prm_env_2d.mc_cfree_est()
-        cfree_volume = cfree_prop*cspace_volume
+        cfree_volume = cspace_volume
 
         print("Total volume: "+str(cspace_volume))
-        print("Cree proportion: "+str(cfree_prop))
-        print("Cfree volume: "+str(cfree_volume))
         print("Hallway size: "+str(hallway_size))
         collision_buffer = 0.01
-        delta = hallway_size - (body_aabb_map[body].upper[0] - body_aabb_map[body].lower[0])+collision_buffer
+        delta = hallway_size - ((body_aabb_map[body].upper[0] - body_aabb_map[body].lower[0]) + collision_buffer)/2.0
         print("[Inside MP] delta: "+str(delta))
+        bound = compute_numerical_bound(delta, 0.99, cfree_volume, 6, None)
+        print("Bound prediction: "+str(bound))
         if(adaptive_n):
-            max_samples, _ = compute_numerical_bound(delta, 0.99, cfree_volume, 6, None)
+            max_samples, _ = bound
             min_samples = max_samples-1
         else:
             min_samples=start_samples
@@ -180,28 +178,14 @@ def get_insert_motion_gen(robot,
             print("Num samples: "+str(int(num_samples)))
             prm.grow_to_n_samples(int(num_samples))
 
-            # import matplotlib.pyplot as plt
-            # plt.figure()
-
-            # # plot the existing prm
-            # xdim = 0
-            # ydim = 2
-            # for u, v in prm.prm_graph.iterEdges():
-            #     coords_u = prm.prm_samples[u]
-            #     coords_v = prm.prm_samples[v]
-
-            #     plt.plot([coords_u[xdim], coords_v[xdim]], [coords_u[ydim], coords_v[ydim]], 'ro-')
-
-            # plt.plot([start_vec[0][xdim], end_vec[0][xdim]], [start_vec[0][ydim], end_vec[0][ydim]], 'go-')
-
-            # plt.plot()
-            # plt.show()
+            
             print('N nodes: %i' % prm.num_vertices())
             print('N edges: %i' % prm.num_edges())
 
             print("Start: "+str(start_vec))
             print("End: "+str(end_vec))
             _, path = prm.query_best_solution(start_vec, end_vec)
+
             if(len(path)>0):
                 break
             num_samples = num_samples*factor
@@ -218,17 +202,35 @@ def get_insert_motion_gen(robot,
         
         print("Enumerating path:")
         whole_path = start_vec.tolist()+path.tolist()+end_vec.tolist()
+
+        # import matplotlib.pyplot as plt
+        # plt.figure()
+
+        # # plot the existing prm
+        # xdim = 0
+        # ydim = 2
+        # for u, v in prm.prm_graph.iterEdges():
+        #     coords_u = prm.prm_samples[u]
+        #     coords_v = prm.prm_samples[v]
+        #     plt.plot([coords_u[xdim], coords_v[xdim]], [coords_u[ydim], coords_v[ydim]], 'ro-')
+
+        # for i in range(len(whole_path)-1):
+        #     plt.plot([whole_path[i][xdim], whole_path[i+1][xdim]], [whole_path[i][ydim], whole_path[i+1][ydim]], 'go-')
+
+        # plt.show()
+        
+
         conf_path = []
         for el in whole_path:
             pose = pbu.Pose(pbu.Point(*el[:3]), pbu.Euler(*el[3:]))
             pbu.set_pose(body, pose)
-            pbu.wait_if_gui()
+            # pbu.wait_if_gui()
             body_pose = BodyPose(body, pose)
             conf = get_ik_fn(robot, body, body_pose, grasp, randomize=False, teleport=teleport)
             conf_path.append(conf.values)
             conf_joints = conf.joints
             grasp.assign()
-            pbu.wait_if_gui()
+            # pbu.wait_if_gui()
 
         command = Command(
             [BodyPath(robot, conf_path, joints=conf_joints, attachments=[grasp])]
@@ -330,7 +332,7 @@ def pddlstream_from_problem(robot, names = {},
         postinsert_conf = None
         for (postinsert,) in stable_gen(body, sink):
             preinsert = copy.deepcopy(postinsert)
-            preinsert.pose = pbu.multiply(pbu.Pose(pbu.Point(z=0.12)), preinsert.pose)
+            preinsert.pose = pbu.multiply(pbu.Pose(pbu.Point(x=0.0, z=0.12)), preinsert.pose)
             preinsert_conf = get_ik_fn(robot, body, preinsert, grasp, fixed=fixed, teleport=teleport)
             postinsert_conf = get_ik_fn(robot, body, postinsert, grasp, fixed=fixed, teleport=teleport)
             if(preinsert_conf is not None and postinsert_conf is not None):
@@ -470,7 +472,7 @@ def create_hollow(category, color=pbu.GREY, *args, **kwargs):
 def load_world(min_gap = 0.06):
 
     pbu.set_default_camera()
-    num_radish = 1
+    num_radish = 8
     radishes = []
     min_obj_size = 0.01
     max_obj_width = 0.06
@@ -550,10 +552,10 @@ def postprocess_plan(plan):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--min-samples', default=10, type=int, help='Max num samples for motion planning')
-    parser.add_argument('--max-samples', default=2000, type=int, help='Max num samples for motion planning')
+    parser.add_argument('--min-samples', default=500, type=int, help='Max num samples for motion planning')
+    parser.add_argument('--max-samples', default=5000, type=int, help='Max num samples for motion planning')
     parser.add_argument('--factor', default=1.1, type=int, help='The rate at which we geometrically expand from min-samples to max-samples')
-    parser.add_argument('--delta', default=0.05, type=float, help='Difference between the hallway width and the largest object that needs to fit thorugh the hallway')
+    parser.add_argument('--delta', default=0.04, type=float, help='Difference between the hallway width and the largest object that needs to fit thorugh the hallway')
     parser.add_argument('--seed', default=-1, type=int, help='Seed for selection of robot size and collision placement')
     parser.add_argument('--save-dir', default="./logs/debug", type=str, help='Directory to save planning results')
     parser.add_argument('--vis', action='store_true', help='GUI during planning')
