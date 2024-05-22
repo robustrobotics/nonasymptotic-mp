@@ -553,7 +553,7 @@ def postprocess_plan(plan):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--min-samples', default=500, type=int, help='Max num samples for motion planning')
-    parser.add_argument('--max-samples', default=5000, type=int, help='Max num samples for motion planning')
+    parser.add_argument('--max-samples', default=30000, type=int, help='Max num samples for motion planning')
     parser.add_argument('--factor', default=1.1, type=int, help='The rate at which we geometrically expand from min-samples to max-samples')
     parser.add_argument('--delta', default=0.04, type=float, help='Difference between the hallway width and the largest object that needs to fit thorugh the hallway')
     parser.add_argument('--seed', default=-1, type=int, help='Seed for selection of robot size and collision placement')
