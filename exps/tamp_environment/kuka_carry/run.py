@@ -13,7 +13,7 @@ from pddlstream.algorithms.meta import solve
 from pddlstream.language.generator import from_gen_fn, from_fn, from_test
 from pddlstream.utils import read, get_file_path, negate_test
 from separating_axis import OBB, separating_axis_theorem
-from pddlstream.language.constants import PDDLProblem
+from pddlstream.language.constants import PDDLProblem, print_solution
 import random
 from typing import List
 from nonasymptotic.bound import compute_numerical_bound
@@ -601,7 +601,7 @@ def main():
     args = parser.parse_args()
 
     pbu.connect(use_gui=args.vis)
-    
+
     save_dir = os.path.join(args.save_dir, str(time.time()))
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -656,6 +656,7 @@ def main():
         solution = solve(problem, algorithm="adaptive", unit_costs=False, verbose=True, success_cost=pbu.INF, temp_dir=os.path.join(save_dir, "pddl"))
         saver.restore()
 
+    print_solution(solution)
     print("Time: "+str(time.time()-st))
     plan, cost, evaluations = solution
     if (plan is None) or not pbu.has_gui():
@@ -667,8 +668,6 @@ def main():
     pbu.wait_for_user('Execute?')
     command.refine(num_steps=10).execute(time_step=0.001)
     pbu.wait_for_user('Finish?')
-    pbu.disconnect()
-
 
 if __name__ == '__main__':
     main()
