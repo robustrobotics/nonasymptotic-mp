@@ -28,6 +28,7 @@ import itertools
 from collections import namedtuple
 from tqdm import tqdm
 import numpy as np
+import logging
 
 DEFAULT_ARM_POS = (0, 0, 0, 0, 0, 0, 0)
 Shape = namedtuple(
@@ -238,6 +239,28 @@ def get_insert_motion_gen(robot,
         return (command,)
 
     return fn
+
+def setup_logging(save_dir):
+    log_level = logging.DEBUG
+    logging.basicConfig(
+        level=log_level,
+        format="%(message)s",
+        handlers=[logging.FileHandler(os.path.join(save_dir, f"{time.time()}.log"))],
+    )
+
+    logger = logging.getLogger()
+
+    # Add StreamHandler to logger to output logs to stdout
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setLevel(log_level)
+    formatter = logging.Formatter("%(message)s")
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+
+    # Redirect stdout and stderr
+    sys.stdout = StreamToLogger(logger, log_level)
+    sys.stderr = StreamToLogger(logger, logging.ERROR)
+    
 
 def create_hollow_shapes(indices, width=0.30, length=0.4, height=0.15, thickness=0.01):
     assert len(indices) == 3
@@ -565,8 +588,18 @@ def main():
     parser.add_argument('--adaptive-n', action='store_true', help='Teleports between configurations')
 
     args = parser.parse_args()
+
+    save_dir = os.path.join(args.save_dir, str(time.time()))
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    setup_logging(save_dir=save_dir)
+
+    os.makedirs(os.path.join(save_dir, "pddl"))
+
     print("Experiment arguments:")
     print(vars(args))
+    
+
     pbu.connect(use_gui=args.vis)
     teleport = False
     robot, names, movable, sink_obstacle_oobbs, fixed, placement_links = load_world(min_gap=args.delta)
@@ -605,8 +638,6 @@ def main():
     print('Init:', init)
     print('Goal:', goal)
     print('Streams:', pbu.str_from_object(set(stream_map)))
-    save_dir = os.path.join(args.save_dir, str(time.time()))
-    os.makedirs(os.path.join(save_dir, "pddl"))
     st = time.time()
     with pbu.Profiler():
         solution = solve(problem, algorithm="adaptive", unit_costs=False, verbose=True, success_cost=pbu.INF, temp_dir=os.path.join(save_dir, "pddl"))
