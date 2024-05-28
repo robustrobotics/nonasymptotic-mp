@@ -55,12 +55,29 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
         else:
             nn_rads = prm.grow_to_n_samples(n_samples)  # nn_rads is ordered ascending
             nn_rads = np.unique(nn_rads)
-            i_conn_lb = 1
+            i_conn_lb = 0
             i_conn_ub = nn_rads.size - 1  # we're sticking to integers so we can maximize code sharing
+
+
 
         end_t = time.time()
         build_runtime = end_t - start_t
 
+        if prm_type == 'radius' and nn_rads.size == 0:
+            result_record.append(
+                (prm_type,
+                dim,
+                delta_clear,
+                n_samples,
+                np.nan,
+                np.nan,
+                build_runtime,
+                0,
+                'no connections made',
+                rng_seed)
+            )
+            continue
+    
         # binary search down to radius
         query_start = np.array([-1.0] + [0.0] * (dim - 1))
         query_end = np.array([1.0] + [0.0] * (dim - 1))
@@ -69,10 +86,41 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
         info = ''
         while True:
             if i_conn_lb + 1 == i_conn_ub:
+                if prm_type == 'knn' and i_conn_ub >= max_connections:
+                    prm.set_nearest_neighbors(max_connections) 
+
+                elif prm_type == 'radius' and i_conn_ub >= nn_rads.size - 1:
+                    prm.set_connection_radius(nn_rads[-1])
+
+                _, path = prm.query_best_solution(query_start, query_end)
+                prm_has_path = len(path)
+                if not prm_has_path:
+                    info = 'no paths found for all connection settings' 
+                    i_conn_lb = max_connections if prm_type == 'knn' else nn_rads.size - 1
+                    i_conn_ub = np.nan
                 break
+                        
             elif i_conn_lb >= i_conn_ub:
+                # the normal instance for this to come up if there is only one connecting pair in a radius prm (which happens)
+                if prm_type == 'radius' and i_conn_lb == i_conn_ub:
+                    prm.set_connection_radius(nn_rads[-1]) 
+                    _, path = prm.query_best_solution(query_start, query_end)
+                    prm_has_path = len(path)
+
+                    if not prm_has_path:
+                        info = 'only one connection; and no path found.' 
+                        i_conn_lb = nn_rads.size - 1
+                        i_conn_ub = np.nan
+
+                    else:
+                        info = 'only one connection; and path found!' 
+                        i_conn_lb = np.nan
+                        i_conn_ub = nn_rads.size - 1
+
+                    break
+
                 # again, flag it some weird behavior... but don't shut the exp down since we may get valuable results
-                info = 'something went wrong... rad_lb is not supposed to be >= rad_ub'
+                info = 'something went wrong... rad_lb is not supposed to be >= rad_ub and we have more than one conn'
                 break
 
             i_conn_test = int((i_conn_lb + i_conn_ub) / 2)
@@ -96,8 +144,16 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
         end_t = time.time()
         check_runtime = end_t - start_t
 
-        failed_conn = i_conn_lb if prm_type == 'knn' else nn_rads[i_conn_lb]
-        succeed_conn = i_conn_ub if prm_type == 'knn' else nn_rads[i_conn_ub]
+        if not np.isnan(i_conn_lb):
+            failed_conn = i_conn_lb if prm_type == 'knn' else nn_rads[i_conn_lb]
+        else:
+            failed_conn = np.nan
+
+        if not np.isnan(i_conn_ub):
+            succeed_conn = i_conn_ub if prm_type == 'knn' else nn_rads[i_conn_ub]
+        else:
+            succeed_conn = np.nan
+
         result_record.append(
             (prm_type,
              dim,
@@ -163,7 +219,11 @@ rng = np.random.default_rng(seed=task_id)
 df_save_path = os.path.join(exp_save_path, 'out%i.csv' % task_id)
 if os.path.exists(df_save_path):
     all_tasks_record_df = pd.read_csv(df_save_path, index_col=0)
-    tasks = tasks[all_tasks_record_df.shape[0]:]  # skip ahead if we have completed entries
+
+    # there is one seed per 'master' task, so we can count unique seeds to
+    # see by how many we need to skip ahead.
+    n_seeds = all_tasks_record_df['seed'].unique().shape[0]
+    tasks = tasks[n_seeds:]  # skip ahead if we have completed entries
 else:
     all_tasks_record_df = None
 
