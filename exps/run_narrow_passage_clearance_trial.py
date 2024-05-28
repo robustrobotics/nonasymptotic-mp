@@ -101,7 +101,8 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
                 break
                         
             elif i_conn_lb >= i_conn_ub:
-                # the normal instance for this to come up if there is only one connecting pair in a radius prm (which happens)
+                # the normal instance for this to come up if there is only one connecting pair in a radius prm
+                # (which happens)
                 if prm_type == 'radius' and i_conn_lb == i_conn_ub:
                     prm.set_connection_radius(nn_rads[-1]) 
                     _, path = prm.query_best_solution(query_start, query_end)
