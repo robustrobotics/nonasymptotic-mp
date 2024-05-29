@@ -225,13 +225,12 @@ def get_insert_motion_gen(robot,
         for el in whole_path:
             pose = pbu.Pose(pbu.Point(*el[:3]), pbu.Euler(*el[3:]))
             pbu.set_pose(body, pose)
-            # pbu.wait_if_gui()
             body_pose = BodyPose(body, pose)
             conf = get_ik_fn(robot, body, body_pose, grasp, randomize=False, teleport=teleport)
-            conf_path.append(conf.values)
-            conf_joints = conf.joints
-            grasp.assign()
-            # pbu.wait_if_gui()
+            if(conf is not None):
+                conf_path.append(conf.values)
+                conf_joints = conf.joints
+                grasp.assign()
 
         command = Command(
             [BodyPath(robot, conf_path, joints=conf_joints, attachments=[grasp])]
@@ -332,6 +331,8 @@ def pddlstream_from_problem(robot, names = {},
         body_to_grasp[body] = grasp
         pose = BodyPose(body, pbu.get_pose(body))
         conf = get_ik_fn(robot, body, pose, grasp, fixed=fixed, teleport=teleport)
+        if(conf is None):
+            return None
         init += [('Grasp', body, grasp),
                  ('Graspable', body),
                  ('Pose', body, pose),
@@ -358,6 +359,9 @@ def pddlstream_from_problem(robot, names = {},
             preinsert.pose = pbu.multiply(pbu.Pose(pbu.Point(x=0.0, z=0.12)), preinsert.pose)
             preinsert_conf = get_ik_fn(robot, body, preinsert, grasp, fixed=fixed, teleport=teleport)
             postinsert_conf = get_ik_fn(robot, body, postinsert, grasp, fixed=fixed, teleport=teleport)
+
+            if(preinsert_conf is None or postinsert_conf is None):
+                return None
             if(preinsert_conf is not None and postinsert_conf is not None):
                 init += [('Pose', body, postinsert), 
                          ('Pose', body, preinsert), 
@@ -561,7 +565,7 @@ def load_world(min_gap = 0.06):
             conf =  get_ik_fn(robot, radish, pose, grasp, fixed=fixed, teleport=False)
             if(conf is not None):
                 placed.append(radish)
-                break   
+                break
     return robot, body_names, movable_bodies, sink_obstacle_oobbs, fixed, placement_links
 
 def postprocess_plan(plan):
@@ -613,38 +617,44 @@ def main():
     print(vars(args))
     
 
-    
-    teleport = False
-    robot, names, movable, sink_obstacle_oobbs, fixed, placement_links = load_world(min_gap=args.delta)
-    print('Objects:', names)
+    while(True):
+        teleport = False
+        robot, names, movable, sink_obstacle_oobbs, fixed, placement_links = load_world(min_gap=args.delta)
+        print('Objects:', names)
 
-    pbu.wait_if_gui()
+        pbu.wait_if_gui()
 
-    saver = pbu.WorldSaver()
+        saver = pbu.WorldSaver()
 
-    max_samples = args.max_samples
-    min_samples = args.min_samples
-    
-    if(args.adaptive_n):
-        min_samples = max_samples-1
-    else:
+        max_samples = args.max_samples
         min_samples = args.min_samples
+        
+        if(args.adaptive_n):
+            min_samples = max_samples-1
+        else:
+            min_samples = args.min_samples
 
 
-    print("Delta: "+str(args.delta))
-    print("Min samples: "+str(min_samples))
-    print("Max samples: "+str(max_samples))
-    
-    problem = pddlstream_from_problem(robot, names=names, min_samples=min_samples, 
-                                      max_samples=max_samples, 
-                                      factor=args.factor, 
-                                      adaptive_n=args.adaptive_n, 
-                                      placement_links=placement_links, 
-                                      fixed=fixed, 
-                                      movable=movable,
-                            
-                                      sink_obstacle_oobbs=sink_obstacle_oobbs, 
-                                      teleport=teleport)
+        print("Delta: "+str(args.delta))
+        print("Min samples: "+str(min_samples))
+        print("Max samples: "+str(max_samples))
+        
+        problem = pddlstream_from_problem(robot, names=names, min_samples=min_samples, 
+                                        max_samples=max_samples, 
+                                        factor=args.factor, 
+                                        adaptive_n=args.adaptive_n, 
+                                        placement_links=placement_links, 
+                                        fixed=fixed, 
+                                        movable=movable,
+                                
+                                        sink_obstacle_oobbs=sink_obstacle_oobbs, 
+                                        teleport=teleport)
+        
+        if problem is not None: 
+            break
+        else:
+            for body in pbu.get_bodies():
+                pbu.remove_body(body)
 
 
     _, _, _, stream_map, init, goal = problem
@@ -660,7 +670,7 @@ def main():
     print("Time: "+str(time.time()-st))
     plan, cost, evaluations = solution
     if (plan is None) or not pbu.has_gui():
-        pbu.disconnect()
+        p.disconnect()
         return
 
     pbu.set_joint_positions(robot, pbu.get_movable_joints(robot), DEFAULT_ARM_POS)
