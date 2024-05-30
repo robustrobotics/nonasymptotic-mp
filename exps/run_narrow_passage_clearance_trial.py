@@ -6,6 +6,7 @@ import time
 
 import numpy as np
 import pandas as pd
+import math
 
 import itertools as it
 import json
@@ -49,16 +50,16 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
 
         # build prm and set up rad search array
         if prm_type == 'knn':
+            # we hope log2 gets within 0.5 of right answer
+            nn_ks = 2 ** np.arange(2, round(math.log2(max_connections)) + 1)
             prm.grow_to_n_samples(n_samples)
-            i_conn_lb = 3
-            i_conn_ub = max_connections
+            i_conn_lb = 0
+            i_conn_ub = nn_ks.size - 1
         else:
             nn_rads = prm.grow_to_n_samples(n_samples)  # nn_rads is ordered ascending
             nn_rads = np.unique(nn_rads)
             i_conn_lb = 0
             i_conn_ub = nn_rads.size - 1  # we're sticking to integers so we can maximize code sharing
-
-
 
         end_t = time.time()
         build_runtime = end_t - start_t
@@ -66,18 +67,18 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
         if prm_type == 'radius' and nn_rads.size == 0:
             result_record.append(
                 (prm_type,
-                dim,
-                delta_clear,
-                n_samples,
-                np.nan,
-                np.nan,
-                build_runtime,
-                0,
-                'no connections made',
-                rng_seed)
+                 dim,
+                 delta_clear,
+                 n_samples,
+                 np.nan,
+                 np.nan,
+                 build_runtime,
+                 0,
+                 'no connections made',
+                 rng_seed)
             )
             continue
-    
+
         # binary search down to radius
         query_start = np.array([-1.0] + [0.0] * (dim - 1))
         query_end = np.array([1.0] + [0.0] * (dim - 1))
@@ -88,8 +89,8 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
         info = ''
         while True:
             if i_conn_lb + 1 == i_conn_ub:
-                if prm_type == 'knn' and i_conn_ub >= max_connections:
-                    prm.set_nearest_neighbors(max_connections) 
+                if prm_type == 'knn' and i_conn_ub >= nn_ks.size - 1:
+                    prm.set_nearest_neighbors(nn_ks[-1])
 
                 elif prm_type == 'radius' and i_conn_ub >= nn_rads.size - 1:
                     prm.set_connection_radius(nn_rads[-1])
@@ -97,25 +98,25 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
                 dist, path = prm.query_best_solution(query_start, query_end)
                 path_len = len(path)
                 if not path_len:
-                    info = 'no paths found for all connection settings' 
-                    i_conn_lb = max_connections if prm_type == 'knn' else nn_rads.size - 1
+                    info = 'no paths found for all connection settings'
+                    i_conn_lb = nn_ks.size - 1 if prm_type == 'knn' else nn_rads.size - 1
                     i_conn_ub = np.nan
                 else:
                     threshold_path_dist = dist
                     threshold_path_len = path_len
 
                 break
-                        
+
             elif i_conn_lb >= i_conn_ub:
-                # the normal instance for this to come up if there is only one connecting pair in a radius prm
+                # the only instance for this to come up if there is only one connecting pair in a radius prm
                 # (which happens)
                 if prm_type == 'radius' and i_conn_lb == i_conn_ub:
-                    prm.set_connection_radius(nn_rads[-1]) 
+                    prm.set_connection_radius(nn_rads[-1])
                     dist, path = prm.query_best_solution(query_start, query_end)
                     path_len = len(path)
 
                     if not path_len:
-                        info = 'only one connection; and no path found.' 
+                        info = 'only one connection; and no path found.'
                         i_conn_lb = nn_rads.size - 1
                         i_conn_ub = np.nan
 
@@ -136,7 +137,7 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
 
             # now, we split based on PRM time again
             if prm_type == 'knn':
-                kn_test = i_conn_test
+                kn_test = nn_ks[i_conn_test]
                 prm.set_nearest_neighbors(kn_test)
             else:
                 rad_test = nn_rads[i_conn_test]
@@ -156,12 +157,12 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
         check_runtime = end_t - start_t
 
         if not np.isnan(i_conn_lb):
-            failed_conn = i_conn_lb if prm_type == 'knn' else nn_rads[i_conn_lb]
+            failed_conn = nn_ks[i_conn_lb] if prm_type == 'knn' else nn_rads[i_conn_lb]
         else:
             failed_conn = np.nan
 
         if not np.isnan(i_conn_ub):
-            succeed_conn = i_conn_ub if prm_type == 'knn' else nn_rads[i_conn_ub]
+            succeed_conn = nn_ks[i_conn_ub] if prm_type == 'knn' else nn_rads[i_conn_ub]
         else:
             succeed_conn = np.nan
 
