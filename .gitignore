@@ -251,6 +251,7 @@ LLSUB*/
 # debugging efforts
 debug/
 paper/
+paper2/
 final_project/
 kgraph/
 .DS_Store
