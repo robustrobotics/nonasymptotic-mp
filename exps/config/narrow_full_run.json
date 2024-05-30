@@ -1,0 +1,9 @@
+{
+  "deltas": [0.499, 0.3, 0.1],
+  "radius_sample_schedule": [100, 1000],
+  "knn_sample_schedule": [1000, 10000, 100000, 1000000],
+  "dims_to_test": [2, 3, 6, 7, 10, 14, 20],
+  "knn_prm_max_neighbors": 254,
+  "radius_prm_max_radius": 0.5,
+  "n_trials": 100
+}
