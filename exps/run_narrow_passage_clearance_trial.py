@@ -7,7 +7,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from itertools import product
+import itertools as it
 import json
 import sys
 import os
@@ -217,12 +217,21 @@ with open(exp_config_path, 'r') as f:
 # generate the options and select the ones this task will perform
 print('beginning task id %i num_tasks %i' % (task_id, num_tasks))
 
-exp_combos = list(product(
-    ['radius', 'knn'],
+radius_exp_combos = it.product(
+    ['radius'],
     config['deltas'],
-    config['dims_to_test'],
+    config['radius_dims_to_test'],
     range(config['n_trials'])
-))
+)
+
+knn_exp_combos = it.product(
+    ['knn'],
+    config['deltas'],
+    config['knn_dims_to_test'],
+    range(config['n_trials'])
+)
+
+exp_combos = list(it.chain(radius_exp_combos, knn_exp_combos))
 
 # assign tasks to this process
 tasks = exp_combos[task_id:len(exp_combos):num_tasks]
