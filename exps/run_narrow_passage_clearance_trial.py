@@ -83,6 +83,8 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
         query_end = np.array([1.0] + [0.0] * (dim - 1))
 
         start_t = time.time()
+        threshold_path_dist = np.nan
+        threshold_path_len = np.nan
         info = ''
         while True:
             if i_conn_lb + 1 == i_conn_ub:
@@ -92,12 +94,16 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
                 elif prm_type == 'radius' and i_conn_ub >= nn_rads.size - 1:
                     prm.set_connection_radius(nn_rads[-1])
 
-                _, path = prm.query_best_solution(query_start, query_end)
-                prm_has_path = len(path)
-                if not prm_has_path:
+                dist, path = prm.query_best_solution(query_start, query_end)
+                path_len = len(path)
+                if not path_len:
                     info = 'no paths found for all connection settings' 
                     i_conn_lb = max_connections if prm_type == 'knn' else nn_rads.size - 1
                     i_conn_ub = np.nan
+                else:
+                    threshold_path_dist = dist
+                    threshold_path_len = path_len
+
                 break
                         
             elif i_conn_lb >= i_conn_ub:
@@ -105,16 +111,18 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
                 # (which happens)
                 if prm_type == 'radius' and i_conn_lb == i_conn_ub:
                     prm.set_connection_radius(nn_rads[-1]) 
-                    _, path = prm.query_best_solution(query_start, query_end)
-                    prm_has_path = len(path)
+                    dist, path = prm.query_best_solution(query_start, query_end)
+                    path_len = len(path)
 
-                    if not prm_has_path:
+                    if not path_len:
                         info = 'only one connection; and no path found.' 
                         i_conn_lb = nn_rads.size - 1
                         i_conn_ub = np.nan
 
                     else:
-                        info = 'only one connection; and path found!' 
+                        info = 'only one connection; and path found!'
+                        threshold_path_dist = dist
+                        threshold_path_len = path_len
                         i_conn_lb = np.nan
                         i_conn_ub = nn_rads.size - 1
 
@@ -134,10 +142,12 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
                 rad_test = nn_rads[i_conn_test]
                 prm.set_connection_radius(rad_test)
 
-            _, path = prm.query_best_solution(query_start, query_end)
-            prm_has_path = len(path)
+            dist, path = prm.query_best_solution(query_start, query_end)
+            path_len = len(path)
 
-            if prm_has_path:
+            if path_len:
+                threshold_path_dist = dist
+                threshold_path_len = path_len
                 i_conn_ub = i_conn_test
             else:
                 i_conn_lb = i_conn_test
@@ -162,6 +172,8 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
              n_samples,
              failed_conn,
              succeed_conn,
+             threshold_path_dist,
+             threshold_path_len,
              build_runtime,
              check_runtime,
              info,
@@ -181,6 +193,8 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
                                  'n_samples',
                                  'conn_lb',
                                  'conn_ub',
+                                 'thresh_path_dist',
+                                 'thresh_path_len',
                                  'build_time',
                                  'check_time',
                                  'info',
