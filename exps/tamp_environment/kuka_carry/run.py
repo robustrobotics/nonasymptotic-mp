@@ -123,7 +123,7 @@ def get_insert_motion_gen(robot,
                           adaptive_n=False):
     
     def fn(conf1, conf2, body, grasp, fluents=[]):
-        
+        print("Planning for object:"+str(body))
         conf1.assign()
         grasp.attachment().assign()
         start_oobb = pbu.get_oobb(body)
@@ -147,7 +147,7 @@ def get_insert_motion_gen(robot,
 
         print("Total volume: "+str(cspace_volume))
         print("Hallway size: "+str(hallway_size))
-        collision_buffer = 0.01
+        collision_buffer = 0.02
         delta = hallway_size - ((body_aabb_map[body].upper[0] - body_aabb_map[body].lower[0]) + collision_buffer)/2.0
         print("[Inside MP] delta: "+str(delta))
         bound = compute_numerical_bound(delta, 0.99, cfree_volume, 6, None)
@@ -194,7 +194,8 @@ def get_insert_motion_gen(robot,
         
         print("Path: "+str(path))
         if(len(path) == 0):
-            print("Max samples reached")
+            print("Max samples reached. Cannot complete planning.")
+            raise SubplanFailed
             return None
         else:
             print("Found solution in")
@@ -356,7 +357,7 @@ def pddlstream_from_problem(robot, names = {},
         postinsert_conf = None
         for (postinsert,) in stable_gen(body, sink):
             preinsert = copy.deepcopy(postinsert)
-            preinsert.pose = pbu.multiply(pbu.Pose(pbu.Point(x=0.0, z=0.12)), preinsert.pose)
+            preinsert.pose = pbu.multiply(pbu.Pose(pbu.Point(x=0.02, z=0.14)), preinsert.pose)
             preinsert_conf = get_ik_fn(robot, body, preinsert, grasp, fixed=fixed, teleport=teleport)
             postinsert_conf = get_ik_fn(robot, body, postinsert, grasp, fixed=fixed, teleport=teleport)
 
@@ -499,7 +500,7 @@ def create_hollow(category, color=pbu.GREY, *args, **kwargs):
 def load_world(min_gap = 0.06):
 
     pbu.set_default_camera()
-    num_radish = 8
+    num_radish = 1
     radishes = []
     min_obj_size = 0.01
     max_obj_width = 0.06
@@ -588,6 +589,13 @@ class StreamToLogger:
     def flush(self):
         pass
     
+class SubplanFailed(Exception):
+    """Exception raised for specific errors in my application."""
+
+    def __init__(self, message="A subplan failed to find a solution"):
+        self.message = message
+        super().__init__(self.message)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--min-samples', default=500, type=int, help='Max num samples for motion planning')
@@ -662,22 +670,26 @@ def main():
     print('Goal:', goal)
     print('Streams:', pbu.str_from_object(set(stream_map)))
     st = time.time()
-    with pbu.Profiler():
-        solution = solve(problem, algorithm="adaptive", unit_costs=False, verbose=True, success_cost=pbu.INF, temp_dir=os.path.join(save_dir, "pddl"))
-        saver.restore()
 
-    print_solution(solution)
-    print("Time: "+str(time.time()-st))
-    plan, cost, evaluations = solution
-    if (plan is None) or not pbu.has_gui():
-        p.disconnect()
-        return
+    try:
+        with pbu.Profiler():
+            solution = solve(problem, algorithm="adaptive", unit_costs=False, verbose=True, success_cost=pbu.INF, temp_dir=os.path.join(save_dir, "pddl"))
+            saver.restore()
+        print_solution(solution)
+        print("Time: "+str(time.time()-st))
+        plan, cost, evaluations = solution
+        if (plan is None) or not pbu.has_gui():
+            p.disconnect()
+            return
 
-    pbu.set_joint_positions(robot, pbu.get_movable_joints(robot), DEFAULT_ARM_POS)
-    command = postprocess_plan(plan)
-    pbu.wait_for_user('Execute?')
-    command.refine(num_steps=10).execute(time_step=0.001)
-    pbu.wait_for_user('Finish?')
+        pbu.set_joint_positions(robot, pbu.get_movable_joints(robot), DEFAULT_ARM_POS)
+        command = postprocess_plan(plan)
+        pbu.wait_for_user('Execute?')
+        command.refine(num_steps=10).execute(time_step=0.001)
+        pbu.wait_for_user('Finish?')
+    except SubplanFailed as e:
+        print("Solved: False")
+        print("Time: "+str(time.time()-st))
 
 if __name__ == '__main__':
     main()
