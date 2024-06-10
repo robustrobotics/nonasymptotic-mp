@@ -500,7 +500,7 @@ def create_hollow(category, color=pbu.GREY, *args, **kwargs):
 def load_world(min_gap = 0.06):
 
     pbu.set_default_camera()
-    num_radish = 1
+    num_radish = 8
     radishes = []
     min_obj_size = 0.01
     max_obj_width = 0.06
