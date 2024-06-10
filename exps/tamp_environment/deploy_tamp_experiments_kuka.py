@@ -30,15 +30,15 @@ def count_lines_of_command_output():
         return 0
     
 def deploy_with_args(min_samples, max_samples, adaptive, debug=False):
-    command_str = f"sbatch --array=1-{NUM_RUNS_PER} deploy_experiments_kuka.sh {min_samples} {max_samples} {adaptive}"
+    command_str = f"sbatch --array=1-1 deploy_experiments_kuka.sh {min_samples} {max_samples} {adaptive}"
+    print(command_str)
     if(not debug):
         subprocess.run(command_str, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    else:
-        print(command_str)
+        
 
 if __name__ == "__main__":
     # An arg set is (min_samples, max_samples, adaptive-n bool)
-    debug=False
+    debug=True
     min_min = 500
     max_max = 30000
     MAX_JOBS = 200
@@ -50,7 +50,11 @@ if __name__ == "__main__":
         arg_sets.append((min_min-1, int(n), 0))
         arg_sets.append((int(n)-1, int(n), 0))
 
-    for i, arg_set in enumerate(arg_sets):
+    queue = list(arg_sets)*50
+    print(queue)
+    random.shuffle(queue)
+
+    while(len(queue)>0):
         assert os.path.isfile("./tmux_lock.txt")
 
         queue_size = count_lines_of_command_output()
@@ -62,5 +66,11 @@ if __name__ == "__main__":
                 time.sleep(30)
         
         print("deploying {}/{}".format(i, len(arg_sets)))
-        deploy_with_args(*arg_set, debug=debug)
-        time.sleep(60*3)
+        experiments = queue[:50]
+        queue = queue[:50]
+        for experiment in experiments:
+            deploy_with_args(*experiment, debug=debug)
+            time.sleep(0.1)
+        
+        if(not debug):
+            time.sleep(60*3)
