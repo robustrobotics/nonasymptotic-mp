@@ -510,7 +510,7 @@ def load_world(min_gap = 0.06):
     pbu.set_default_camera()
     num_radish = 8
     radishes = []
-    min_obj_size = 0.01
+    min_obj_size = 0.001
     max_obj_width = 0.06
     robot = pbu.load_model(pbu.DRAKE_IIWA_URDF, fixed_base=True)
     floor = pbu.load_model('models/short_floor.urdf')
@@ -518,7 +518,7 @@ def load_world(min_gap = 0.06):
     for i in range(num_radish):
         if(i>0):
             u = np.random.uniform(0, 1)
-            obj_width = min_obj_size + (max_obj_width - min_obj_size) * (1 - (1 - u)**(1/4))
+            obj_width = min_obj_size #+ (max_obj_width - min_obj_size) * (1 - (1 - u)**(1/4))
         else:
             obj_width = max_obj_width
         radishes.append(pbu.create_box(obj_width, obj_width, 0.2, color=pbu.GREEN))
