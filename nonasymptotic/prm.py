@@ -266,24 +266,24 @@ class SimpleFullConnRadiusPRM(SimplePRM):
         # there may be a way to do this with networkit.sparsification, but I can't find it
 
         # if above max, recompute graph.
-        if new_conn_r > self.max_conn_r:
-            self.conn_r = new_conn_r
-            # just trigger a rebuild.
-            self.grow_to_n_samples(self._samples.shape[0])
-            return
+        # if new_conn_r > self.max_conn_r:
+        self.conn_r = new_conn_r
+        # just trigger a rebuild.
+        self.grow_to_n_samples(self._samples.shape[0])
+        # return
 
         # if the requested conn_r is below max, then we are asking for a subgraph of the
         # master graph. Reload master graph.
-        if new_conn_r > self.conn_r:
-            self._g_prm = nk.readGraph(self.tmp_graph_cache_path, nk.Format.NetworkitBinary)
+        # if new_conn_r > self.conn_r:
+        #     self._g_prm = nk.readGraph(self.tmp_graph_cache_path, nk.Format.NetworkitBinary)
 
         # then iterate over and remove the edges that are too large
         # (if master graph needed to be reloaded or otherwise)
-        for u, v, w in self._g_prm.iterEdgesWeights():
-            if w >= new_conn_r:
-                self._g_prm.removeEdge(u, v)
+        # for u, v, w in self._g_prm.iterEdgesWeights():
+        #     if w >= new_conn_r:
+        #         self._g_prm.removeEdge(u, v)
 
-        self.conn_r = new_conn_r
+        # self.conn_r = new_conn_r
 
     def reset(self):
         self._samples = None
