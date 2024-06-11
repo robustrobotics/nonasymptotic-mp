@@ -258,7 +258,7 @@ class SimpleFullConnRadiusPRM(SimplePRM):
         nk.writeGraph(master_graph, self.tmp_graph_cache_path, nk.Format.NetworkitBinary)
 
         self._g_prm = master_graph
-        self.max_conn_r = self.conn_r  # update max_conn_r to reflect rad of master graph.
+        # self.max_conn_r = self.conn_r  # update max_conn_r to reflect rad of master graph.
 
         return valid_dists_in_range
 
@@ -267,7 +267,7 @@ class SimpleFullConnRadiusPRM(SimplePRM):
 
         # if above max, recompute graph.
         # if new_conn_r > self.max_conn_r:
-        self.conn_r = new_conn_r
+        self.conn_r = new_conn_r # TODO: conn_r is now poorly handled
         # just trigger a rebuild.
         self.grow_to_n_samples(self._samples.shape[0])
         # return
