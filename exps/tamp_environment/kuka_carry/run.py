@@ -26,7 +26,6 @@ import copy
 import string
 import itertools
 from collections import namedtuple
-from tqdm import tqdm
 import numpy as np
 import logging
 
@@ -38,9 +37,10 @@ Shape = namedtuple(
 
 class BagOfBoundingBoxes(Environment):
 
-    def __init__(self, seed, start_oobb:pbu.OOBB, end_oobb:pbu.OOBB, obstacle_oobbs:List[pbu.OOBB]):
+    def __init__(self, seed, start_oobb:pbu.OOBB, end_oobb:pbu.OOBB, obstacle_oobbs:List[pbu.OOBB], theta_margin=None):
         self.obstacle_oobbs = obstacle_oobbs
         self.aabb = start_oobb.aabb
+        self.theta_margin=theta_margin
         all_oobb_verts = [pbu.get_oobb_vertices(oobb) for oobb in self.obstacle_oobbs]+[[start_oobb[1][0]]]
         self.bounds = self.extents(itertools.chain(*all_oobb_verts))
         print("Bounds: "+str(self.bounds))
@@ -54,8 +54,11 @@ class BagOfBoundingBoxes(Environment):
         min_x, max_x = min(x_coords), max(x_coords)
         min_y, max_y = min(y_coords), max(y_coords)
         min_z, max_z = min(z_coords), max(z_coords)
-        rote = np.pi/32.0
-        return ((min_x, max_x), (min_y, max_y), (min_z, max_z), (-rote, rote), (-rote, rote), (-rote, rote))
+        
+        return ((min_x, max_x), (min_y, max_y), (min_z, max_z), 
+                (-self.theta_margin, self.theta_margin), 
+                (-self.theta_margin, self.theta_margin), 
+                (-self.theta_margin, self.theta_margin))
 
     def sample_from_env(self):
         return np.array([random.uniform(self.bounds[i][0], self.bounds[i][1]) for i in range(len(self.bounds))])
@@ -120,6 +123,8 @@ def get_insert_motion_gen(robot,
                           start_samples=100, 
                           end_samples=1000, 
                           factor=1.5,
+                          collision_buffer=None,
+                          theta_margin=None,
                           adaptive_n=False):
     
     def fn(conf1, conf2, body, grasp, fluents=[]):
@@ -139,7 +144,7 @@ def get_insert_motion_gen(robot,
         hallway_size = obstacle_oobbs[WALL_LINK_2][1][0][0]+obstacle_oobbs[WALL_LINK_2][0].upper[0] - \
             obstacle_oobbs[WALL_LINK_1][1][0][0]+obstacle_oobbs[WALL_LINK_1][0].lower[0]
 
-        prm_env_2d = BagOfBoundingBoxes(seed=seed, start_oobb = start_oobb, end_oobb = end_oobb, obstacle_oobbs = obstacle_oobbs)
+        prm_env_2d = BagOfBoundingBoxes(seed=seed, start_oobb = start_oobb, end_oobb = end_oobb, obstacle_oobbs = obstacle_oobbs, theta_margin=theta_margin)
         cspace_volume = 1
         for bound in prm_env_2d.bounds:
             cspace_volume *= (bound[1]-bound[0])
@@ -147,7 +152,6 @@ def get_insert_motion_gen(robot,
 
         print("Total volume: "+str(cspace_volume))
         print("Hallway size: "+str(hallway_size))
-        collision_buffer = 0.02
         delta = hallway_size - ((body_aabb_map[body].upper[0] - body_aabb_map[body].lower[0]) + collision_buffer)/2.0
         print("[Inside MP] delta: "+str(delta))
         bound = compute_numerical_bound(delta, 0.99, cfree_volume, 6, None)
@@ -306,6 +310,8 @@ def pddlstream_from_problem(robot, names = {},
                             max_samples=None, 
                             factor=1.0, 
                             adaptive_n=False, 
+                            collision_buffer=None,
+                            theta_margin = None,
                             grasp_name='top'):
     #assert (not are_colliding(tree, kin_cache))
 
@@ -404,7 +410,9 @@ def pddlstream_from_problem(robot, names = {},
                                                             start_samples=min_samples, 
                                                             end_samples=max_samples, 
                                                             factor=factor, 
+                                                            collision_buffer=collision_buffer,
                                                             adaptive_n=adaptive_n,
+                                                            theta_margin=theta_margin,
                                                             teleport=teleport)),
     }
 
@@ -602,6 +610,8 @@ def main():
     parser.add_argument('--max-samples', default=30000, type=int, help='Max num samples for motion planning')
     parser.add_argument('--factor', default=1.1, type=int, help='The rate at which we geometrically expand from min-samples to max-samples')
     parser.add_argument('--delta', default=0.04, type=float, help='Difference between the hallway width and the largest object that needs to fit thorugh the hallway')
+    parser.add_argument('--theta-margin', default=np.pi/12.0, type=float, help='')
+    parser.add_argument('--collision-buffer', default=0.02, type=float, help='')
     parser.add_argument('--seed', default=-1, type=int, help='Seed for selection of robot size and collision placement')
     parser.add_argument('--save-dir', default="./logs/debug", type=str, help='Directory to save planning results')
     parser.add_argument('--vis', action='store_true', help='GUI during planning')
@@ -651,10 +661,10 @@ def main():
                                         max_samples=max_samples, 
                                         factor=args.factor, 
                                         adaptive_n=args.adaptive_n, 
+                                        collision_buffer=args.collision_buffer,
                                         placement_links=placement_links, 
                                         fixed=fixed, 
                                         movable=movable,
-                                
                                         sink_obstacle_oobbs=sink_obstacle_oobbs, 
                                         teleport=teleport)
         
