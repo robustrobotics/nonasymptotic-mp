@@ -51,11 +51,13 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
         # build prm and set up rad search array
         if prm_type == 'knn':
             # we hope log2 gets within 0.5 of right answer
-            nn_ks = 2 ** np.arange(2, round(math.log2(max_connections)) + 1)
+            prm.k_neighbors = prm.max_k_neighbors   # reset the conn setting from whatever it was from bin search
             prm.grow_to_n_samples(n_samples)
+            nn_ks = 2 ** np.arange(2, round(math.log2(max_connections)) + 1)
             i_conn_lb = 0
             i_conn_ub = nn_ks.size - 1
         else:
+            prm.conn_r = prm.max_conn_r # reset the conn setting from whatever it was from bin search
             nn_rads = prm.grow_to_n_samples(n_samples)  # nn_rads is ordered ascending
             nn_rads = np.unique(nn_rads)
             i_conn_lb = 0

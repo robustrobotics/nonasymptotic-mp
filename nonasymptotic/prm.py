@@ -295,8 +295,7 @@ class SimpleFullConnRadiusPRM(SimplePRM):
 
     def _query_samples(self, query):
         dists_from_query = np.linalg.norm(self._samples - query, axis=1)
-        within_conn_r = dists_from_query <= self.conn_r if self.conn_r is not None \
-            else dists_from_query <= self.certified_max_conn_r
+        within_conn_r = dists_from_query <= self.conn_r
 
         points_within_conn_r = self._samples[within_conn_r]
         ids_within_conn_r = np.arange(self._samples.shape[0])[within_conn_r]

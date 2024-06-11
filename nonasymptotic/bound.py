@@ -24,13 +24,30 @@ def compute_sauer_shelah_bound_log2(m_samples, rho, vc_dim):
     # switched to exact computation so scipy can handle big integers,
     # but the function can no longer be vectorized :(
 
-    ss_comb_sum = np.sum([scipy.special.comb(2 * m_samples, _d, exact=True) for _d in range(vc_dim + 1)])
+    ss_comb_sum = compute_ss_comb_sum(m_samples, vc_dim)
 
     # to dodge some numerical imprecision of the exponentiation, let's do the calculation
     #   in 2-logspace. math.log2 doesn't convert to float (unlike numpy), so we use that here.
 
     log2_prob = math.log2(ss_comb_sum) + (-rho * m_samples / 2) + 1
     return log2_prob
+
+
+def compute_ss_comb_sum(m_samples, vc_dim):
+    ss_comb_sum = np.sum([scipy.special.comb(2 * m_samples, _d, exact=True) for _d in range(vc_dim + 1)])
+    return ss_comb_sum
+
+
+def compute_net_radius_from_prob(dim, n_samples, failure_prob, vol_env, ad_hoc_magnitude_correction=1):
+    n_samples = np.ceil(n_samples / ad_hoc_magnitude_correction)
+    ss_comb_sum = compute_ss_comb_sum(n_samples, dim + 1)
+    vol_unit_sphere = compute_vol_unit_sphere(dim)
+    measure_unit_sphere = vol_unit_sphere / vol_env
+
+    return (
+            (2 / n_samples / measure_unit_sphere)
+            * (math.log2(ss_comb_sum) - math.log2(failure_prob))
+    ) ** (1 / dim)
 
 
 def doubling_sample_search_over_log2_prob_bound(samples_to_log2_prob, success_prob):
@@ -138,7 +155,6 @@ def compute_tail_knn_radius_log_prob_hoeffding_mean_variant(m_samples, k_neighbo
     # all points will land in it and mess everything up)
     # but preserving some monotonicity properties of the prob bound
     tail_val = np.maximum(tail_val, 0.0)
-
     log_p_fail = np.log(m_samples) - 2 * (m_samples - 1) * tail_val ** 2 / (p_r_ball ** 2)
     return log_p_fail
 
@@ -153,18 +169,27 @@ def compute_tail_knn_radius_log_prob_chernoff_generic(m_samples, k_neighbors, co
     return log_p_fail
 
 
-def compute_tail_knn_radius_log_prob_chernoff_kl(m_samples, k_neighbors, conn_rad, dim, vol_env):
+def compute_tail_knn_radius_log_prob_chernoff_kl(m_samples, k_neighbors, conn_rad, dim, vol_env,
+                                                 enable_union_bound_factor=True):
     measures_unit_sphere = compute_vol_unit_sphere(dim) / vol_env
     p_r_ball = np.minimum(measures_unit_sphere * (conn_rad ** dim), 1.0)
     tail_val = np.maximum(k_neighbors / m_samples - p_r_ball, 0.0)
 
     ppt_dist = np.array([p_r_ball + tail_val, 1.0 - p_r_ball - tail_val])
     p_dist = np.array([p_r_ball, 1.0 - p_r_ball])
-    log_p_fail = np.log(m_samples) - scipy.stats.entropy(ppt_dist, qk=p_dist) * (m_samples - 1)
+
+    if enable_union_bound_factor:
+        log_p_fail = np.log(m_samples) - scipy.stats.entropy(ppt_dist, qk=p_dist) * (m_samples - 1)
+    else:
+        log_p_fail = - scipy.stats.entropy(ppt_dist, qk=p_dist) * (m_samples - 1)
+
     return log_p_fail
 
 
 def halving_radius_search_over_log_prob_bound(radius_to_log_prob, rad_lb, rad_ub, success_prob, tol=1e-6):
+    """
+    Finds largest radius past the union bound hump.
+    """
     assert rad_lb < rad_ub
     failure_prob = 1 - success_prob
     log_failure_prob = np.log(failure_prob)
@@ -197,3 +222,41 @@ def linear_radius_search_over_prob_bound(radius_to_prob, rad_lb, rad_ub, success
         test_gamma = radius_to_prob(rad + tol)
         if test_gamma > failure_prob:
             return rad
+
+## ZOMBIE CODE
+# def doubling_radius_search_over_log2_prob_bound(radius_to_log_prob, rad_lb, success_prob, tol=1e-6):
+#     """
+#     Does not assume that there is a union bound hump. Finds
+#     the smallest radius satisfying probability.
+#     """
+#     assert rad_lb > 0.0
+#
+#     failure_prob = 1 - success_prob
+#     log_failure_prob = math.log2(failure_prob)
+#
+#     rad_ub = rad_lb
+#     while True:
+#         if rad_ub < 0 or rad_ub >= 10:
+#             raise ArithmeticError('Overflow or output radius too large to be useful.')
+#
+#         if radius_to_log_prob(rad_ub) > log_failure_prob:
+#             rad_ub *= 2
+#         else:
+#             break
+#
+#     while True:
+#         if rad_ub - rad_lb <= tol:
+#             return rad_ub
+#         elif rad_ub < rad_lb:
+#             raise ArithmeticError('Something wrong happened.')
+#
+#         test_rad = rad_ub + rad_lb / 2
+#         if radius_to_log_prob > log_failure_prob:
+#             # if the test failure probability is too large, then we need to grow radius for
+#             # a larger net (less likely to fail)
+#             rad_lb = test_rad
+#         else:
+#             # if the test failure probability is too small, then shrink the radius
+#             # if the tst failure probability is too small,
+#             rad_ub = test_rad
+#
