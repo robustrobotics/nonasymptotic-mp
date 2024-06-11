@@ -624,7 +624,7 @@ def main():
 
     pbu.connect(use_gui=args.vis)
 
-    save_dir = os.path.join(args.save_dir, "{}_{}".format(str( np.random.randint(0,10000), str(time.time()))))
+    save_dir = os.path.join(args.save_dir, "{}_{}".format(str( np.random.randint(0,10000)), str(time.time())))
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     setup_logging(save_dir=save_dir)
@@ -662,6 +662,7 @@ def main():
                                         factor=args.factor, 
                                         adaptive_n=args.adaptive_n, 
                                         collision_buffer=args.collision_buffer,
+                                        theta_margin=args.theta_margin,
                                         placement_links=placement_links, 
                                         fixed=fixed, 
                                         movable=movable,
