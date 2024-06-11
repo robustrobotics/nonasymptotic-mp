@@ -90,6 +90,7 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
         while True:
             if i_conn_lb + 1 == i_conn_ub:
                 if prm_type == 'knn' and i_conn_ub >= nn_ks.size - 1:
+                    print('max %i asked for %i' % (prm.max_k_neighbors, nn_ks[-1])) 
                     prm.set_nearest_neighbors(nn_ks[-1])
 
                 elif prm_type == 'radius' and i_conn_ub >= nn_rads.size - 1:

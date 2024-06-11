@@ -425,7 +425,7 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
 
     def set_nearest_neighbors(self, new_k_nearest_neighbors):
         if new_k_nearest_neighbors > self.max_k_neighbors:
-            raise ArithmeticError('Cannot grow KNN PRM passed the original set number of neighbors.')
+            raise ArithmeticError('Cannot grow KNN PRM past the original set number of neighbors.')
 
         # if we need to grow the graph, then reload the master graph.
         if new_k_nearest_neighbors > self.k_neighbors:
