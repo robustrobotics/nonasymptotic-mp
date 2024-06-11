@@ -5,6 +5,7 @@ import os
 
 MAX_TOTAL = 100
 NUM_RUNS_PER = 50
+import numpy as np
 
 def count_lines_of_command_output():
     try:
@@ -29,8 +30,8 @@ def count_lines_of_command_output():
         print(f"Error executing command: {e}")
         return 0
     
-def deploy_with_args(min_samples, max_samples, adaptive, debug=False):
-    command_str = f"sbatch --array=1-1 deploy_experiments_kuka.sh {min_samples} {max_samples} {adaptive}"
+def deploy_with_args(delta, collision_buffer, theta_margin, debug=False):
+    command_str = f"sbatch --array=1-1 deploy_experiments_kuka_adaptive.sh {delta} {collision_buffer} {theta_margin}"
     print(command_str)
     if(not debug):
         subprocess.run(command_str, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -43,34 +44,10 @@ if __name__ == "__main__":
     max_max = 30000
     MAX_JOBS = 200
     queue_size = 1
-    arg_sets = [(0, 0, 1)] # adaptive bound
+    arg_sets = [(0.04, 0.02, np.pi/32.0)] # adaptive bound
     num_points = 20
-    for i in range(num_points):
-        n = random.uniform(min_min+1, max_max)
-        arg_sets.append((min_min-1, int(n), 0))
-        arg_sets.append((int(n)-1, int(n), 0))
-
-    queue = list(arg_sets)*50
-    print(queue)
-    random.shuffle(queue)
-
-    while(len(queue)>0):
-        assert os.path.isfile("./tmux_lock.txt")
-
-        queue_size = count_lines_of_command_output()
-
-        while(queue_size>(MAX_TOTAL-NUM_RUNS_PER)-1):
-            print("Queue size: "+str(queue_size))
-            if(not debug):
-                queue_size = count_lines_of_command_output()
-                time.sleep(30)
-        
-        print("deploying {}/{}".format(i, len(arg_sets)))
-        experiments = queue[:50]
-        queue = queue[50:]
-        for experiment in experiments:
-            deploy_with_args(*experiment, debug=debug)
-            time.sleep(0.1)
-        
-        if(not debug):
-            time.sleep(60*3)
+    i=0
+    queue = list(arg_sets)*5
+    assert len(queue)< MAX_JOBS
+    for experiment in queue:
+        deploy_with_args(*experiment, debug=debug)
