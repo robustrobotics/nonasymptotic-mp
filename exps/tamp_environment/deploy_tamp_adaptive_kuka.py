@@ -44,7 +44,13 @@ if __name__ == "__main__":
     max_max = 30000
     MAX_JOBS = 200
     queue_size = 1
-    arg_sets = [(0.04, 0.02, np.pi/32.0)] # adaptive bound
+    arg_sets = []
+
+    for delta in [0.02, 0.03, 0.04]:
+        for cb in [0.02, 0.03, 0.04]:
+            for t in [np.pi/18.0, np.pi/32.0]:
+                arg_sets += [(delta, cb, t)] # adaptive bound
+
     num_points = 20
     i=0
     queue = list(arg_sets)*5
