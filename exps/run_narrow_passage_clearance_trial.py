@@ -82,8 +82,12 @@ def narrow_passage_clearance(delta_clear, dim, rng_seed,
             continue
 
         # binary search down to radius
-        query_start = np.array([-1.0] + [0.0] * (dim - 1))
-        query_end = np.array([1.0] + [0.0] * (dim - 1))
+
+        # corrector to ensure problem is challenging throughout
+        corrector = np.ones(dim) * 0.5 - delta_clear
+
+        query_start = np.array([-1.0] + [0.0] * (dim - 1)) - corrector
+        query_end = np.array([1.0] + [0.0] * (dim - 1)) + corrector
 
         start_t = time.time()
         threshold_path_dist = np.nan
