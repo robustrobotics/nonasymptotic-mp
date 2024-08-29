@@ -19,6 +19,9 @@ def compute_rho(clearance, tol, dim, vol_env):
     measures_unit_sphere = compute_vol_unit_sphere(dim) / vol_env
     return measures_unit_sphere * (compute_epsilon_net_radius(clearance, tol) ** dim)
 
+def compute_ss_comb_sum(m_samples, vc_dim):
+    ss_comb_sum = sum([scipy.special.comb(2 * m_samples, _d, exact=True) for _d in range(vc_dim + 1)])
+    return ss_comb_sum
 
 def compute_sauer_shelah_bound_log2(m_samples, rho, vc_dim):
     # switched to exact computation so scipy can handle big integers,
@@ -32,12 +35,6 @@ def compute_sauer_shelah_bound_log2(m_samples, rho, vc_dim):
     log2_prob = math.log2(ss_comb_sum) + (-rho * m_samples / 2) + 1
     return log2_prob
 
-
-def compute_ss_comb_sum(m_samples, vc_dim):
-    ss_comb_sum = np.sum([scipy.special.comb(2 * m_samples, _d, exact=True) for _d in range(vc_dim + 1)])
-    return ss_comb_sum
-
-
 def compute_net_radius_from_prob(dim, n_samples, failure_prob, vol_env, ad_hoc_magnitude_correction=1):
     n_samples = np.ceil(n_samples / ad_hoc_magnitude_correction)
     ss_comb_sum = compute_ss_comb_sum(n_samples, dim + 1)
@@ -48,6 +45,14 @@ def compute_net_radius_from_prob(dim, n_samples, failure_prob, vol_env, ad_hoc_m
             (2 / n_samples / measure_unit_sphere)
             * (math.log2(ss_comb_sum) - math.log2(failure_prob))
     ) ** (1 / dim)
+
+
+def compute_blumer_bound(net_rad, dim, gamma, vol_env):
+    vol_net_ball = compute_vol_unit_sphere(dim) * net_rad ** dim
+    measure_vol_net_ball = vol_net_ball / vol_env
+    vc_dim = dim + 1
+    return np.maximum(4 / measure_vol_net_ball * np.log2(2 / gamma),
+                      8 * vc_dim / measure_vol_net_ball * np.log2(13 / measure_vol_net_ball))
 
 
 def doubling_sample_search_over_log2_prob_bound(samples_to_log2_prob, success_prob):
