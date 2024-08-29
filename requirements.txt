@@ -6,8 +6,9 @@ networkit~=10.1
 shapely~=2.0.2
 matplotlib~=3.7.1
 scipy~=1.10.1
-triangle
+triangle~=20230923
 pandas~=2.0.2
-pybullet~=3.2.6
-seaborn~=0.12.2
-tabulate
+numba~=0.58.1
+networkx~=2.8.8
+scikit-learn~=1.3.2
+setuptools~=65.5.1
