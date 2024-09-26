@@ -216,8 +216,14 @@ def halving_radius_search_over_log_prob_bound(radius_to_log_prob, rad_lb, rad_ub
         else:
             rad_lb = test_rad
 
+def compute_eff_conn_rad_bound(m_samples, k_neighbors, dim, vol_env, failure_prob):
+    measure_unit_sphere = np.minimum(compute_vol_unit_sphere(dim) / vol_env, 1.0)
+    numer = k_neighbors - np.sqrt(2 * k_neighbors * (np.log(m_samples) - np.log(failure_prob)))
+    denom = (m_samples - 1) * measure_unit_sphere
+    return math.pow(numer / denom, 1 / dim)
 
 def linear_radius_search_over_prob_bound(radius_to_prob, rad_lb, rad_ub, success_prob, tol=1e-6):
+    # Sanity check search
     failure_prob = 1 - success_prob
     rad = rad_lb
     while True:
@@ -227,6 +233,8 @@ def linear_radius_search_over_prob_bound(radius_to_prob, rad_lb, rad_ub, success
         test_gamma = radius_to_prob(rad + tol)
         if test_gamma > failure_prob:
             return rad
+
+
 
 ## ZOMBIE CODE
 # def doubling_radius_search_over_log2_prob_bound(radius_to_log_prob, rad_lb, success_prob, tol=1e-6):
