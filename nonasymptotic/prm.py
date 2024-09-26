@@ -60,7 +60,7 @@ class SimplePRM(ABC):
     def query_best_solution(self, start, goal):
         # NOTE: if there isn't a solution... will return an infinite distance. This is
         # just a quirk of networkit that we just need to work around.
-
+        
         # Returned path is excluding the endpoints
         # first, loop start and goal into graph
         start_nns_ids, start_nns_dists = self._query_samples(start)
@@ -405,7 +405,7 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
             self.master_dists[:, -1])  # the closest kth neighbor makes the certified conn_r
         if self.verbose:
             print("Certified maximal correct connection radius: %f" % self.certified_max_conn_r)
-
+            
         # NOT true Knn from points on line, but not important for us
         if self.in_mp_exp_mode:
             n_samples = self._samples.shape[0]
