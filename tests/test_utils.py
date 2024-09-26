@@ -1,5 +1,6 @@
 from sampler import random_point_in_mpolygon
-from bound import compute_rho, compute_sauer_shelah_bound, compute_numerical_bound
+from bound import compute_numerical_bound
+from util import detect_intersect
 
 from shapely.geometry import Polygon, MultiPolygon, MultiLineString, MultiPoint
 from shapely.plotting import plot_polygon, plot_points
@@ -62,47 +63,47 @@ class TestRandomSampling:
 
 class TestSauerShelah:
 
-    def test_sauer_shelah_combinatorial_computation(self):
-        # a very simple system sanity checks to make sure
-        # we have the sauer-shelah lemma bound down.
-        rho = 0.0
-        vc_dim = 3
-        m_samples = 5
-        comb_sum = (scipy.special.comb(2 * m_samples, 0) +
-                    scipy.special.comb(2 * m_samples, 1) +
-                    scipy.special.comb(2 * m_samples, 2) +
-                    scipy.special.comb(2 * m_samples, 3))
-        comb_sum = int(comb_sum)
+    # def test_sauer_shelah_combinatorial_computation(self):
+    #     # a very simple system sanity checks to make sure
+    #     # we have the sauer-shelah lemma bound down.
+    #     rho = 0.0
+    #     vc_dim = 3
+    #     m_samples = 5
+    #     comb_sum = (scipy.special.comb(2 * m_samples, 0) +
+    #                 scipy.special.comb(2 * m_samples, 1) +
+    #                 scipy.special.comb(2 * m_samples, 2) +
+    #                 scipy.special.comb(2 * m_samples, 3))
+    #     comb_sum = int(comb_sum)
+    #
+    #     assert comb_sum == int(compute_sauer_shelah_bound(m_samples, rho, vc_dim) / 2)
+    #
+    # def test_sauer_shelah_decay_computation(self):
+    #     rho = 1.0
+    #     vc_dim = 0  # this cancels the ss_comb_sum
+    #     m_samples = 1
+    #     decay_factor = 2 * np.exp2(-rho * m_samples / 2)
+    #
+    #     assert decay_factor == compute_sauer_shelah_bound(m_samples, rho, vc_dim)
 
-        assert comb_sum == int(compute_sauer_shelah_bound(m_samples, rho, vc_dim) / 2)
-
-    def test_sauer_shelah_decay_computation(self):
-        rho = 1.0
-        vc_dim = 0  # this cancels the ss_comb_sum
-        m_samples = 1
-        decay_factor = 2 * np.exp2(-rho * m_samples / 2)
-
-        assert decay_factor == compute_sauer_shelah_bound(m_samples, rho, vc_dim)
-
-    def test_numerical_search(self):
-        # making sure we recover the samples of a specific probabilit
-
-        delta = 0.5
-        epsilon = 0.5
-        dim = 2
-        vol_env = 1.0
-        rho = compute_rho(delta, epsilon, dim, vol_env)
-
-        vc_dim = dim + 1
-        m_samples = 350
-
-        failure_prob_lb = compute_sauer_shelah_bound(m_samples, rho, vc_dim)
-        failure_prob_ub = compute_sauer_shelah_bound(m_samples + 1, rho, vc_dim)
-
-        failure_prob_to_find = (failure_prob_ub + failure_prob_lb) / 2
-        recovered_m_samples = compute_numerical_bound(delta, 1.0 - failure_prob_to_find, vol_env, dim, epsilon)
-
-        assert recovered_m_samples[0] == m_samples + 1
+    # def test_numerical_search(self):
+    #     # making sure we recover the samples of a specific probabilit
+    #
+    #     delta = 0.5
+    #     epsilon = 0.5
+    #     dim = 2
+    #     vol_env = 1.0
+    #     rho = compute_rho(delta, epsilon, dim, vol_env)
+    #
+    #     vc_dim = dim + 1
+    #     m_samples = 350
+    #
+    #     failure_prob_lb = compute_sauer_shelah_bound(m_samples, rho, vc_dim)
+    #     failure_prob_ub = compute_sauer_shelah_bound(m_samples + 1, rho, vc_dim)
+    #
+    #     failure_prob_to_find = (failure_prob_ub + failure_prob_lb) / 2
+    #     recovered_m_samples = compute_numerical_bound(delta, 1.0 - failure_prob_to_find, vol_env, dim, epsilon)
+    #
+    #     assert recovered_m_samples[0] == m_samples + 1
 
     def test_existence_requires_fewer_samples(self):
         delta = 0.5
@@ -113,3 +114,41 @@ class TestSauerShelah:
         no_tol_samples, _ = compute_numerical_bound(delta, 1.0 - 0.1, vol_env, dim, epsilon)
         loose_tol_samples, _ = compute_numerical_bound(delta, 1.0 - 0.1, vol_env, dim, 10)
         assert loose_tol_samples > no_tol_samples
+
+
+class TestIntersection:
+    def test_vert_hori_non_intersection(self):
+        s1e1 = np.array([[0.01, -0.05]])
+        s1e2 = np.array([[0.0, 0.05]])
+
+        s2e1 = np.array([[-0.5, 0.1]])
+        s2e2 = np.array([[0.5, 0.11]])
+
+        assert not detect_intersect(s1e1, s1e2, s2e1, s2e2)[0]
+
+    def test_vert_hori_intersection(self):
+        s1e1 = np.array([[-0.5, 0.1]])
+        s1e2 = np.array([[0.5, 0.1]])
+
+        s2e1 = np.array([[0.0, -0.05]])
+        s2e2 = np.array([[0.0, 0.15]])
+
+        assert detect_intersect(s1e1, s1e2, s2e1, s2e2)[0]
+
+    def test_vert_hori_flipped_non_intersection(self):
+        s1e1 = np.array([[-0.5, -0.1]])
+        s1e2 = np.array([[0.5, -0.1]])
+
+        s2e1 = np.array([[0.0, -0.05]])
+        s2e2 = np.array([[0.0, 0.15]])
+
+        assert not detect_intersect(s1e1, s1e2, s2e1, s2e2)[0]
+
+    def test_x_intersection(self):
+        s1e1 = np.array([[-0.5, -0.5]])
+        s1e2 = np.array([[0.5, 0.5]])
+
+        s2e1 = np.array([[0.5, -0.5]])
+        s2e2 = np.array([[-0.5, 0.5]])
+
+        assert detect_intersect(s1e1, s1e2, s2e1, s2e2)[0]

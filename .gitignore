@@ -244,11 +244,14 @@ ompl/
 # project directories with logs/data
 notebooks/data/
 
-# experiment results
+# experiment results and logs
 exps/results/*
+LLSUB*/
 
 # debugging efforts
 debug/
 paper/
+paper2/
+final_project/
 kgraph/
 .DS_Store

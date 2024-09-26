@@ -11,6 +11,8 @@ n_threads_to_test = [1, 2, 4, 8, 16, 24, 32, 48]
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument('--type', choices=['narrow', 'line', 'knn'])
+    parser.add_argument('--config-path', required=True)
     parser.add_argument('--triple-to-test', choices=['nppn', 'threads'], required=True)
     parser.add_argument('--other-arg-fill-in', type=int, required=True)
     args = parser.parse_args()
@@ -21,8 +23,9 @@ if __name__ == "__main__":
                 continue
             subprocess.run([
                 "python", "submit_and_run_experiment_job.py",
-                "--name", "triples-tune-%s_%i-%i-%i" % (args.triple_to_test, 1, args.other_arg_fill_in, n_threads),
-                "--config-path", "config/triples_tune_run.json",
+                "--name", "%s-triples-tune-%s_%i-%i-%i" % (args.type, args.triple_to_test, 1, args.other_arg_fill_in, n_threads),
+                "--type", args.type,
+                "--config-path", args.config_path,
                 "--triples-args", "1", str(args.other_arg_fill_in), str(n_threads)
             ])
 
@@ -33,8 +36,9 @@ if __name__ == "__main__":
             else:
                 subprocess.run([
                     "python", "submit_and_run_experiment_job.py",
-                    "--name", "triples-tune-%s_%i-%i-%i" % (args.triple_to_test, 1, nppn, args.other_arg_fill_in),
-                    "--config-path", "config/triples_tune_run.json",
+                    "--name", "%s-triples-tune-%s_%i-%i-%i" % (args.type, args.triple_to_test, 1, nppn, args.other_arg_fill_in),
+                    "--type", args.type,
+                    "--config-path", args.config_path,
                     "--triples-args", "1", str(nppn), str(args.other_arg_fill_in)
                 ])
     else:

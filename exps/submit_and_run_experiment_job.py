@@ -25,7 +25,7 @@ python -u {script_name} $LLSUB_RANK $LLSUB_SIZE {arg0} {arg1}"""
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--type', type=str, required=True, choices=['line', 'knn'],
+    parser.add_argument('--type', type=str, required=True, choices=['narrow', 'line', 'knn'],
                         help='Type of experiment to run')
     parser.add_argument("--name", type=str, required=True,
                         help="Name of the experiment.")
@@ -73,6 +73,12 @@ if __name__ == "__main__":
 
         # generate the submission script (and store in experiment directory)
         script_name = 'run_straight_line_trial.py' if args.type == 'line' else 'run_knn_radius_trial.py'
+        if args.type == 'line':
+            script_name = 'run_straight_line_optimality_trial.py'
+        elif args.type == 'knn':
+            script_name = 'run_knn_radius_trial.py'
+        else:
+            script_name = 'run_narrow_passage_clearance_trial.py'
         submit_script_text = submit_sh_script_prototype_text.format(script_name=script_name,
                                                                     arg0=config_path, arg1=save_path)
         submit_script_path = os.path.join(save_path, 'submit_job.sh')

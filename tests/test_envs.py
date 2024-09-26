@@ -1,5 +1,4 @@
-from nonasymptotic.envs import GrayCodeWalls, MidCuboidRegions, EndCuboidRegions, StraightLine
-from nonasymptotic.prm import SimpleRadiusPRM
+from nonasymptotic.envs import GrayCodeWalls, MidCuboidRegions, EndCuboidRegions, NarrowPassage
 
 from sympy.combinatorics.graycode import GrayCode
 import networkx as nx
@@ -520,25 +519,56 @@ class TestGrayCodeEnvMotionValidityChecker:
         assert not self.anti_regression_env.is_motion_valid(start, goal)
 
 
-class TestEpsilonDeltaCompletePropertyTest:
+# class TestEpsilonDeltaCompletePropertyTest:
+#
+#     def test_consistent_readings(self):
+#         env = StraightLine(dim=2, delta_clearance=0.5, seed=1)
+#
+#         prm = SimpleRadiusPRM(0.1, env.is_motion_valid, env.sample_from_env, env.distance_to_path, seed=1)
+#         prm.grow_to_n_samples(1000)
+#         completes = []
+#
+#         for _ in range(100):
+#             is_complete, _ = env.is_prm_epsilon_delta_complete(prm, 0.25, n_samples_per_check=100, timeout=60)
+#             completes.append(is_complete)
+#
+#         assert np.all(np.array(completes)) or np.all(~np.array(completes))
+#
+#     def test_timeout(self):
+#         env = StraightLine(dim=2, delta_clearance=0.5, seed=1)
+#         prm = SimpleRadiusPRM(0.1, env.is_motion_valid, env.sample_from_env, env.distance_to_path, seed=1)
+#         prm.grow_to_n_samples(1000)
+#
+#         is_complete, info = env.is_prm_epsilon_delta_complete(prm, 0.22, n_samples_per_check=100, timeout=0.1)
+#         assert info == 'timed out'
 
-    def test_consistent_readings(self):
-        env = StraightLine(dim=2, delta_clearance=0.5, seed=1)
 
-        prm = SimpleRadiusPRM(0.1, env.is_motion_valid, env.sample_from_env, env.distance_to_path, seed=1)
-        prm.grow_to_n_samples(1000)
-        completes = []
+class TestNarrowPassagesMotionValidityChecker:
+    env = NarrowPassage(2, 0.1, 1999)
 
-        for _ in range(100):
-            is_complete, _ = env.is_prm_epsilon_delta_complete(prm, 0.25, n_samples_per_check=100, timeout=60)
-            completes.append(is_complete)
+    def test_corner_clip(self):
+        corner = np.array([[1.4, 0.4]])
+        mid_hallway = np.array([[0.0, 0.0]])
 
-        assert np.all(np.array(completes)) or np.all(~np.array(completes))
+        assert not self.env.is_motion_valid(corner, mid_hallway)[0]
 
-    def test_timeout(self):
-        env = StraightLine(dim=2, delta_clearance=0.5, seed=1)
-        prm = SimpleRadiusPRM(0.1, env.is_motion_valid, env.sample_from_env, env.distance_to_path, seed=1)
-        prm.grow_to_n_samples(1000)
+    def test_end_to_end_clip(self):
+        end1 = np.array([[1.4, 0.4]])
+        end2 = np.array([[-1.4, 0.4]])
 
-        is_complete, info = env.is_prm_epsilon_delta_complete(prm, 0.22, n_samples_per_check=100, timeout=0.1)
-        assert info == 'timed out'
+        assert not self.env.is_motion_valid(end1, end2)[0]
+
+    def test_hallway_connects(self):
+        end1 = np.array([[-0.5, 0.0]])
+        end2 = np.array([[0.5, 0.0]])
+        assert self.env.is_motion_valid(end1, end2)[0]
+
+    def test_hallway_up_down(self):
+        end1 = np.array([[0.01, 0.05]])
+        end2 = np.array([[0.0, -0.05]])
+        assert self.env.is_motion_valid(end1, end2)[0]
+
+    def test_end1_connects(self):
+        end1 = np.array([[-0.5, 0.0]])
+        end2 = np.array([[-1.0, 0.0]])
+        assert self.env.is_motion_valid(end1, end2)[0]
