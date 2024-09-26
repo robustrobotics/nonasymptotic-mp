@@ -121,8 +121,9 @@ def get_anytime_motion_fn(problem,
                           start_samples=10, 
                           end_samples=100, 
                           factor=1.5,
-                          holding=False,
                           adaptive_n=False,
+                          holding=False,
+                          
                           **kwargs):
     def test_holding(rover, q1, q2, obj):
         return test(rover, q1, q2, obj=obj)
@@ -133,7 +134,7 @@ def get_anytime_motion_fn(problem,
         goal = np.array(q2.values[:2])
 
         seed = 0
-        
+        print(get_aabb(rover))
         obstacles = set(problem.obstacles)
         obstacle_oobbs = [get_oobb(obstacle) for obstacle in obstacles]
         if(obj is not None):
@@ -143,9 +144,10 @@ def get_anytime_motion_fn(problem,
             robot_shape:AABB = aabb_from_extent_center(get_aabb_extent(get_aabb(rover)))
             
         if(adaptive_n):
-            delta = problem.hallway_gap-(robot_shape.upper[0]-robot_shape.lower[0])
+            collision_buffer = 0.05
+            delta = problem.hallway_gap - (robot_shape.upper[0] - robot_shape.lower[0]) + collision_buffer
             print("[Inside MP] delta: "+str(delta))
-            max_samples, _ = compute_numerical_bound(delta, 0.9, 4, 2, None)
+            max_samples, _ = compute_numerical_bound(delta, 0.99, 16, 2, None)
             min_samples = max_samples-1
         else:
             min_samples=start_samples
@@ -174,7 +176,6 @@ def get_anytime_motion_fn(problem,
             num_samples = num_samples*factor
         
         
-        print("Q1: "+str(q1.values)+" Q2: "+str(q2.values))
         print("Path: "+str(path))
         if(len(path) == 0):
             print("Max samples reached")
