@@ -2,6 +2,8 @@ from nonasymptotic.ann import get_ann
 from networkit.graphtools import GraphTools
 from abc import ABC, abstractmethod
 
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
 import numpy as np
 import networkit as nk
 import uuid
@@ -625,6 +627,93 @@ class SimpleRadiusPRM(SimplePRM):
     @property
     def prm_samples(self) -> np.ndarray:
         return self._samples
+
+
+def animate_knn_prm(_prm, _sol, node_batches=5, edge_batches=5, interval=50, animation_embed_limit=None):
+    if animation_embed_limit is not None:
+        import matplotlib
+        matplotlib.rcParams['animation.embed_limit'] = animation_embed_limit
+
+    fig, ax = plt.subplots()
+    x_min, x_max = np.min(_prm.prm_samples[:, 0]), np.max(_prm.prm_samples[:, 0])
+    y_min, y_max = np.min(_prm.prm_samples[:, 1]), np.max(_prm.prm_samples[:, 1])
+
+    ax.set_xlim([int(x_min) - 1, int(x_max) + 1])
+    ax.set_ylim([int(y_min) - 1, int(y_max) + 1])
+    ax.set_aspect('equal', adjustable='box')
+    ax.grid(False)
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    # first, generate the frame information.
+    n_verts = _prm.num_vertices()
+    k = _prm.k_neighbors
+
+    sampling_frames = []
+    for i in range(int(n_verts / node_batches) + 1):
+        sampling_frames.append(("sampling", (i + 1) * node_batches))
+
+    # next, the edge connection frames
+    edge_frames = []
+    all_edges = list(_prm.prm_graph.iterEdges())
+
+    for i in range(int(len(all_edges) / edge_batches) + 1):
+        edge_frames.append(("connecting", all_edges[i * edge_batches: (i + 1) * edge_batches]))
+
+    # then, the path render/turn graph red frame
+    path_frames = []
+    if len(_sol) > 0:
+        for i in range(len(_sol) - 1):
+            path_frames.append(("pathing", i))
+
+    else:
+        path_frames += [("non-pathing", None)] * 10
+
+    frames = sampling_frames + edge_frames + path_frames + [('hold', None)] * 20
+
+    edge_artists = []
+    vert_artist = ax.scatter([], [], s=20, c='b')
+
+    def update(_f):
+        _mode, _data = _f
+
+        if _mode == 'sampling':
+            vert_artist.set_offsets(_prm.prm_samples[:_data])
+            return (vert_artist,)
+
+        elif _mode == "connecting":
+            for _e in _data:
+                ux, uy = _prm.prm_samples[_e[0]]
+                vx, vy = _prm.prm_samples[_e[1]]
+
+                checking_edge_artist = ax.plot([ux, vx], [uy, vy], linestyle='-', c='b', alpha=0.1)[0]
+                edge_artists.append(checking_edge_artist)
+
+            return edge_artists[:-len(_data)]
+
+        elif _mode == "pathing":
+
+            u, v = _sol[_data], _sol[_data + 1]
+            edge_artists.append(ax.plot([u[0], v[0]], [u[1], v[1]], c='lime', alpha=0.75)[0])
+
+            return (edge_artists[-1],)
+
+        elif _mode == "non-pathing":
+            # turn everything red.
+            vert_artist.set_color('r')
+            for e_art in edge_artists:
+                e_art.set_color('r')
+
+            return (vert_artist, *edge_artists)
+
+        else:
+            return (vert_artist,)
+
+    return animation.FuncAnimation(fig=fig, func=update, frames=frames, interval=interval)
+
+
+
+
 
 
 if __name__ == '__main__':

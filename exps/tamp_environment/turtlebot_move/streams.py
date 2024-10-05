@@ -9,7 +9,7 @@ from pybullet_tools.utils import plan_joint_motion, joints_from_names, get_oobb,
 from separating_axis import vec_separating_axis_theorem
 from pddlstream.language.constants import Output
 from nonasymptotic.envs import Environment
-from nonasymptotic.prm import SimpleNearestNeighborRadiusPRM
+from nonasymptotic.prm import SimpleNearestNeighborRadiusPRM, animate_knn_prm
 from typing import List
 from scipy.spatial import ConvexHull
 from tqdm import tqdm
@@ -17,6 +17,9 @@ import itertools
 import random
 import copy
 from nonasymptotic.bound import compute_numerical_bound
+import matplotlib.animation as animation
+import os
+import time
 
 VIS_RANGE = 2
 COM_RANGE = 2*VIS_RANGE
@@ -60,7 +63,7 @@ class BagOfBoundingBoxes(Environment):
         return ((min_x, max_x), (min_y, max_y), (min_z, max_z))
 
     def sample_from_env(self):
-        return np.array([random.uniform(self.bounds[0][0], self.bounds[0][1]), 
+        return np.array([random.uniform(self.bounds[0][0], self.bounds[0][1]),
                          random.uniform(self.bounds[1][0], self.bounds[1][1])])
 
     def arclength_to_curve_point(self, t_normed):
@@ -82,9 +85,9 @@ class BagOfBoundingBoxes(Environment):
                 verts2d.append(vert[:2])
         assert len(verts2d) == 4
         return verts2d
-    
+
     def is_motion_valid(self, start, goal):
-        
+
         valids = np.ones(start.shape[0]).astype(bool)
         start_exp  = np.tile(np.expand_dims(start, axis=1), (1, self.robot_verts.shape[0], 1))
         goal_exp  = np.tile(np.expand_dims(goal, axis=1), (1, self.robot_verts.shape[0], 1))
@@ -106,7 +109,7 @@ class BagOfBoundingBoxes(Environment):
     @property
     def volume(self):
         raise NotImplementedError
-    
+
 
 def get_ik(problem):
     def ik(robot, object, pose):
@@ -115,21 +118,20 @@ def get_ik(problem):
         return Output(conf)
     return ik
 
-def get_anytime_motion_fn(problem, 
-                          custom_limits={}, 
-                          teleport=False, 
-                          start_samples=10, 
-                          end_samples=100, 
+def get_anytime_motion_fn(problem,
+                          custom_limits={},
+                          teleport=False,
+                          start_samples=10,
+                          end_samples=100,
                           factor=1.5,
                           adaptive_n=False,
                           holding=False,
-                          
                           **kwargs):
     def test_holding(rover, q1, q2, obj):
         return test(rover, q1, q2, obj=obj)
-    
+
     def test(rover, q1, q2, obj=None):
-        
+
         start = np.array(q1.values[:2])
         goal = np.array(q2.values[:2])
 
@@ -142,7 +144,7 @@ def get_anytime_motion_fn(problem,
             robot_shape:AABB = aabb_from_extent_center(get_aabb_extent(get_aabb(obj)))
         else:
             robot_shape:AABB = aabb_from_extent_center(get_aabb_extent(get_aabb(rover)))
-            
+
         if(adaptive_n):
             collision_buffer = 0.05
             delta = problem.hallway_gap - (robot_shape.upper[0] - robot_shape.lower[0]) + collision_buffer
@@ -152,20 +154,20 @@ def get_anytime_motion_fn(problem,
         else:
             min_samples=start_samples
             max_samples=end_samples
-        
+
         print("[Inside MP] min_samples: "+str(min_samples))
         print("[Inside MP] max_samples: "+str(max_samples))
 
         prm_env_2d = BagOfBoundingBoxes(seed=seed, robot_shape=(robot_shape), obstacle_oobbs=obstacle_oobbs, custom_limits=custom_limits)
-        prm = SimpleNearestNeighborRadiusPRM(32, 
-                                     prm_env_2d.is_motion_valid, 
-                                     prm_env_2d.sample_from_env, 
-                                     prm_env_2d.distance_to_path, 
-                                     seed=seed, verbose=False)
-        
+        prm = SimpleNearestNeighborRadiusPRM(32,
+                                     prm_env_2d.is_motion_valid,
+                                     prm_env_2d.sample_from_env,
+                                     prm_env_2d.distance_to_path,
+                                     seed=seed, truncate_to_eff_rad=False, verbose=False)
+
         assert prm_env_2d.is_motion_valid(np.expand_dims(start, axis=0), np.expand_dims(start, axis=0)), "Start in collision"
         assert prm_env_2d.is_motion_valid(np.expand_dims(goal, axis=0), np.expand_dims(goal, axis=0)), "Goal in collision"
-        
+
         num_samples = min_samples
         while(num_samples<max_samples+1):
             print("Num samples: "+str(int(num_samples)))
@@ -174,31 +176,47 @@ def get_anytime_motion_fn(problem,
             if(len(path)>0):
                 break
             num_samples = num_samples*factor
-        
-        
+
+
         print("Path: "+str(path))
+        animate = kwargs.get('animate', False)
         if(len(path) == 0):
             print("Max samples reached")
+            if animate:
+                print('animating...')
+                save_dir = kwargs.get('save_dir')
+                ani = animate_knn_prm(prm, path, node_batches=1000, edge_batches=1000, interval=50,
+                                      animation_embed_limit=2 ** 50)
+                writer = animation.PillowWriter(fps=15, metadata=dict(artist='Me'), bitrate=1800)
+                ani.save(os.path.join(save_dir, str(time.time()) + '.gif'), writer=writer)
             return None
         else:
             print("Found solution in")
             print(num_samples)
 
         path = np.concatenate([np.expand_dims(start, axis=0), path, np.expand_dims(goal, axis=0)], axis=0).tolist()
-        
+
+        # visualize prm.
+        if animate:
+            print('animating...')
+            save_dir = kwargs.get('save_dir')
+            ani = animate_knn_prm(prm, path, node_batches=50, edge_batches=100, interval=50, animation_embed_limit=2 ** 50)
+            writer = animation.PillowWriter(fps=15, metadata=dict(artist='Me'), bitrate=1800)
+            ani.save(os.path.join(save_dir, str(time.time()) + '.gif'), writer=writer)
+
         if(not teleport):
             path = interpolate_vectors(path, threshold=0.025)
-            
+
         ht = create_trajectory(rover, q2.joints, path)
         return Output(ht)
-    
+
     return test if not holding else test_holding
 
 def interpolate_vectors(vectors, threshold):
     # Convert the list of vectors to a NumPy array for efficient computation
     vectors = np.array(vectors)
     interpolated_vectors = [vectors[0]]
-    
+
     for i in range(len(vectors) - 1):
         start, end = vectors[i], vectors[i + 1]
         dist = np.linalg.norm(end - start)
@@ -208,7 +226,7 @@ def interpolate_vectors(vectors, threshold):
             interpolated_steps = np.linspace(start, end, steps + 2, endpoint=False)[1:]
             interpolated_vectors.extend(interpolated_steps)
         interpolated_vectors.append(end)
-    
+
     return np.array(interpolated_vectors)
 
 def get_motion_fn(problem, custom_limits={}, collisions=True, teleport=False, holonomic=False, reversible=False, algorithm="prm", num_samples=10, connect_radius=None, **kwargs):
@@ -240,15 +258,15 @@ def get_motion_fn(problem, custom_limits={}, collisions=True, teleport=False, ho
         q1.assign()
         if holonomic:
             path = plan_joint_motion(rover, q1.joints, q2.values, custom_limits=custom_limits,
-                                     attachments=attachments, obstacles=obstacles, self_collisions=False, 
+                                     attachments=attachments, obstacles=obstacles, self_collisions=False,
                                      algorithm=algorithm, num_samples=num_samples, connect_distance=connect_radius, **kwargs)
         else:
             path = plan_nonholonomic_motion(rover, q1.joints, q2.values, reversible=reversible, custom_limits=custom_limits,
-                                            attachments=attachments, obstacles=obstacles, self_collisions=False, 
+                                            attachments=attachments, obstacles=obstacles, self_collisions=False,
                                             algorithm=algorithm, num_samples=num_samples, connect_distance=connect_radius, **kwargs)
         if path is None:
             return None
-        
+
         ht = create_trajectory(rover, q2.joints, path)
         return Output(ht)
     return test
