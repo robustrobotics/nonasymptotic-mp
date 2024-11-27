@@ -9,7 +9,7 @@ from pybullet_tools.utils import plan_joint_motion, joints_from_names, get_oobb,
 from separating_axis import vec_separating_axis_theorem
 from pddlstream.language.constants import Output
 from nonasymptotic.envs import Environment
-from nonasymptotic.prm import SimpleNearestNeighborRadiusPRM, animate_knn_prm
+from nonasymptotic.prm import SimpleNearestNeighborRadiusPRM
 from typing import List
 from scipy.spatial import ConvexHull
 from tqdm import tqdm
@@ -17,7 +17,8 @@ import itertools
 import random
 import copy
 from nonasymptotic.bound import compute_numerical_bound
-import matplotlib.animation as animation
+
+from networkit.components import ConnectedComponents
 import os
 import time
 
@@ -179,16 +180,16 @@ def get_anytime_motion_fn(problem,
 
 
         print("Path: "+str(path))
-        animate = kwargs.get('animate', False)
         if(len(path) == 0):
             print("Max samples reached")
-            if animate:
-                print('animating...')
-                save_dir = kwargs.get('save_dir')
-                ani = animate_knn_prm(prm, path, node_batches=1000, edge_batches=1000, interval=50,
-                                      animation_embed_limit=2 ** 50)
-                writer = animation.PillowWriter(fps=15, metadata=dict(artist='Me'), bitrate=1800)
-                ani.save(os.path.join(save_dir, str(time.time()) + '.gif'), writer=writer)
+            # if animate:
+            #     print('saving for animating...')
+            #     save_dir = kwargs.get('save_dir')
+            #     save_name = str(time.time())
+            #     save_prefix = str(os.path.join(save_dir, save_name))
+            #     prm.save(save_prefix)
+            #     np.save(save_prefix + '_sol.npy', path)
+            #
             return None
         else:
             print("Found solution in")
@@ -197,12 +198,27 @@ def get_anytime_motion_fn(problem,
         path = np.concatenate([np.expand_dims(start, axis=0), path, np.expand_dims(goal, axis=0)], axis=0).tolist()
 
         # visualize prm.
+        animate = kwargs.get('animate', False)
         if animate:
-            print('animating...')
+            print('saving for animation...')
             save_dir = kwargs.get('save_dir')
-            ani = animate_knn_prm(prm, path, node_batches=50, edge_batches=100, interval=50, animation_embed_limit=2 ** 50)
-            writer = animation.PillowWriter(fps=15, metadata=dict(artist='Me'), bitrate=1800)
-            ani.save(os.path.join(save_dir, str(time.time()) + '.gif'), writer=writer)
+            save_name = str(time.time())
+            save_prefix = str(os.path.join(save_dir, save_name))
+
+            cc_alg = ConnectedComponents(prm.prm_graph)
+            cc_alg.run()
+
+            some_nodes_in_cc, _ = prm._query_samples(start)
+            cc_id = cc_alg.componentOfNode(some_nodes_in_cc[0])
+            cc = cc_alg.getComponents()[cc_id]
+
+            # construct in-component vector
+            node_filter = np.zeros(prm.num_vertices(), dtype='bool')
+            node_filter[cc] = True
+            np.save(save_prefix + '_node_filter.npy', node_filter)
+
+            prm.save(save_prefix)
+            np.save(save_prefix + '_sol.npy', path)
 
         if(not teleport):
             path = interpolate_vectors(path, threshold=0.025)
