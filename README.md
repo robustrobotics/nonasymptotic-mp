@@ -5,7 +5,7 @@ Seiji A Shaw, Aidan Curtis, Leslie Pack Kaelbling, Tomás Lozano-Pérez, and Nic
 
 # Quickstart
 
-To run Task and Motion Planning experiments, see
+To run the Task and Motion Planning experiments, see
 [the TAMP README.md](/exps/tamp_environment/README.md).
 
 To view the implementations of PRM and numerical computations of the bound, see
