@@ -5,11 +5,18 @@ Seiji A Shaw, Aidan Curtis, Leslie Pack Kaelbling, Tomás Lozano-Pérez, and Nic
 
 # Quickstart
 
+To run Task and Motion Planning experiments, see
+[the TAMP README.md](/exps/tamp_environment/README.md).
+
 To view the implementations of PRM and numerical computations of the bound, see
 [the nonasymptotic README.md](/nonasymptotic/README.md).
 
-To run Task and Motion Planning experiments, see
-[the TAMP README.md](/exps/tamp_environment/README.md).
+For examples of how the environments/PRMs are constructed, see 
+[vis_narrow_passages.ipynb](/notebooks/vis_narrow_passages.ipynb).
+
+For examples for how to use the numerical bound computations, see
+[numerical_bound_computations.ipynb](/notebooks/numerical_bound_comparisons.ipynb).
+
 
 
 # Installation
