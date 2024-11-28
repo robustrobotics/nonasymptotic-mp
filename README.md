@@ -15,7 +15,7 @@ For examples of how the environments/PRMs are constructed, see
 [vis_narrow_passages.ipynb](/notebooks/vis_narrow_passages.ipynb).
 
 For examples for how to use the numerical bound computations, see
-[numerical_bound_computations.ipynb](/notebooks/numerical_bound_comparisons.ipynb).
+[numerical_bound_computations.ipynb](/notebooks/numerical_bound_computations.ipynb).
 
 
 
