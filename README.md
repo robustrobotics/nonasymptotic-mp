@@ -1,35 +1,51 @@
 # nonasymptotic-mp
-An exploration of what non-asymptotic statistics + learning theory can say about motion-planning. 
-Hopefully this gives us good engineering insight on algorithms we have, and new ideas for new algorithms too!
 
-# Requirements
+The accompanying codebase for the publication "Towards Practical Finite Sample Bounds for Motion Planning in TAMP," by
+Seiji A Shaw, Aidan Curtis, Leslie Pack Kaelbling, Tomás Lozano-Pérez, and Nicholas Roy.
 
-The `requirements.txt` file included has the minimal set of requirements to
-run this repository. Simply run (perhaps in a `virtualenv`):
+# Quickstart
+
+To view the implementations of PRM and numerical computations of the bound, see
+[the nonasymptotic README.md](/nonasymptotic/README.md).
+
+To run Task and Motion Planning experiments, see
+[the TAMP README.md](/exps/tamp_environment/README.md).
+
+
+# Installation
+
+This code was developed and verified to work for Python 3.8. 
+
+The minimal installation can be done by cloning down the repository and its submodules,
+and then installing all dependencies in `requirements.txt`:
 
 ```shell
+git clone --recursive git@github.com:robustrobotics/nonasymptotic-mp.git
+cd nonasymptotic-mp
 pip install -r requirements.txt
 ```
 
-in the main project directory.
+The minimal installation uses [pynndescent](https://pynndescent.readthedocs.io/en/stable/) 
+to construct an approximate K-nearest neighbors graph that forms the
+PRM. While installable by pip, the KNN graph construction slows down significantly when the input set of points 
+grows larger than ~1e5.
 
-The minimal installation uses [pynndescent](https://pynndescent.readthedocs.io/en/latest/index.html) to construct
-an approximate K-nearest neighbors graph (that forms the PRM), which is slow when input set of points grow larger
-than ~1e5.
+You can optionally install [kgraph](https://github.com/aaalgo/kgraph), a much faster ANN library. 
+The installation procedure has components that must be built from source. 
+Please refer to the [kgraph repo](https://github.com/aaalgo/kgraph) for an installation procedure.
 
-You can optionally install [kgraph](https://github.com/aaalgo/kgraph) (a much faster ANN library), which has a component
-that must be built from source. 
-The dependencies require a modern installation of `cmake`, `g++`, and `BOOST`. The installation _should_ be 
-straightforward (the one included on the github repo).
-Some notes:
 
-- If building on SuperCloud, just makes sure to set the install prefix to `/home/gridsan/<USERNAME>/.local/`.
-  - For `cmake`, just make sure you add the flag `-DCMAKE_INSTALL_PREFIX=/home/gridsan/<USERNAME>/.local` flag.
-  - For `python setup.py`, make sure to add the flag `--prefix /home/gridsan/<USERNAME>/.local`.
-- You may be missing [xsimd](https://github.com/xtensor-stack/xsimd). You can follow their user instructions to install
-it properly, but a quick fix is also copy the `xsimd` directory in the `include` directory to 
-the `kgraph` directory.
-- The `kgraph` repo has a file called `version`, which collides with a standard C++ header that is
-used in newer versions of BOOST. If you get this collision error, just rename the `version` file to something
-else.
   
+# Citation
+
+If this codebase was helpful to you, please consider citing our paper:
+```text
+@inproceedings{
+    shaw2024towards,
+    title={Towards Practical Finite Sample Bounds for Motion Planning in {TAMP}},
+    author={Seiji A Shaw and Aidan Curtis and Leslie Pack Kaelbling and Tom{\'a}s Lozano-P{\'e}rez and Nicholas Roy},
+    booktitle={The 16th International Workshop on the Algorithmic Foundations of Robotics},
+    year={2024},
+    url={https://openreview.net/forum?id=I4pLUVhpU6}
+}
+```
