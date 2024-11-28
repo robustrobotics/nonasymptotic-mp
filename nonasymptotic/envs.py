@@ -363,6 +363,16 @@ class StraightLine(Environment):
 
 
 class NarrowPassage(Environment):
+    """
+    Constructs an dim-dimensional box environment with specified clearance.
+    The extent of the box spans [-1.5, 1.5] in the first axis, and from [-0.5, 0.5] in the remaining axes.
+    The middle is thinned to the specified clearance. In mathematical notation, the constructed
+    environment can be written as:
+
+   [-1.5, -0.5] \times [-0.5, 0.5]^(d-1)
+   \cup [-0.5, 0.5] \times [-clearance, clearance]^(d-1)
+   \cup [0.5, 1.5] \times [-0.5, 0.5]^(d-1)
+    """
     def __init__(self, dim, clearance, seed):
         super().__init__(seed)
         self.rng = np.random.default_rng(seed)
@@ -458,6 +468,9 @@ class NarrowPassage(Environment):
 
 
 class GrayCodeWalls(Environment):
+    """
+    Uses a GrayCode to force a path to traverse the corners of a hypercube. This environment is deprecated.
+    """
     def __init__(self, dim, length, thickness=0.0, seed=None):
         super().__init__(seed)
         assert dim >= 2

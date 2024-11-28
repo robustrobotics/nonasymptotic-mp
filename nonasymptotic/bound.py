@@ -11,19 +11,44 @@ def compute_vol_unit_sphere(_dim):
 
 
 def compute_epsilon_net_radius(clearance, tol):
+    """
+    :param clearance: Clearance of environment.
+    :param tol: Desired stretch factor (within (1 + tol) of optimal path).
+    :return: Radius of PRM sufficient to find paths in environments of given clearance within the specified
+    stretch factor.
+    """
     alpha = tol / np.sqrt(1 + tol ** 2) if tol is not None else 1.0
     return alpha * clearance
 
 
 def compute_rho(clearance, tol, dim, vol_env):
+    """
+    :param clearance:
+    :param clearance: Clearance of environment.
+    :param tol: Desired stretch factor (within (1 + tol) of optimal path).
+    :param vol_env: Volume (Lebesgue measure) of the environment.
+    :return: The volume of each ball (normalized to environment volume) that forms the desired alpha-net.
+    """
     measures_unit_sphere = compute_vol_unit_sphere(dim) / vol_env
     return measures_unit_sphere * (compute_epsilon_net_radius(clearance, tol) ** dim)
 
 def compute_ss_comb_sum(m_samples, vc_dim):
+    """
+    :param m_samples: Number of samples taken.
+    :param vc_dim:  VC-dimension of set system.
+    :return: Sauer-Shelah Lemma bound constant on the number of hit sets of the set system.
+    """
     ss_comb_sum = sum([scipy.special.comb(2 * m_samples, _d, exact=True) for _d in range(vc_dim + 1)])
     return ss_comb_sum
 
 def compute_sauer_shelah_bound_log2(m_samples, rho, vc_dim):
+    """
+    :param m_samples: Number of samples taken.
+    :param vc_dim:  VC-dimension of set system.
+    :param rho: Volume of an element of a hypersphere set system.
+    :return: Log probability a rho-net has been formed.
+    """
+
     # switched to exact computation so scipy can handle big integers,
     # but the function can no longer be vectorized :(
 
@@ -36,6 +61,10 @@ def compute_sauer_shelah_bound_log2(m_samples, rho, vc_dim):
     return log2_prob
 
 def compute_net_radius_from_prob(dim, n_samples, failure_prob, vol_env, ad_hoc_magnitude_correction=1):
+    """
+    :return: The smallest net radius that can be found with n_samples in a ground set with volume vol_env of
+    dimension dim with a given probability of failure.
+    """
     n_samples = np.ceil(n_samples / ad_hoc_magnitude_correction)
     ss_comb_sum = compute_ss_comb_sum(n_samples, dim + 1)
     vol_unit_sphere = compute_vol_unit_sphere(dim)
@@ -134,10 +163,24 @@ def compute_numerical_bound(clearance, success_prob, coll_free_volume, dim, tol)
 
 
 def compute_connection_radius(clearance, tol):
+    """
+    :param clearance: Clearance of environment.
+    :param tol: Desired optimalit stretch factor (within (1 + tol) of optimal distance).
+    :return: Sufficient connection radius of PRM.
+    """
     return 2 * clearance * (tol + 1) / np.sqrt(1 + tol ** 2)
 
 
 def compute_tail_knn_radius_log_prob_hoeffding(m_samples, k_neighbors, conn_rad, dim, vol_env):
+    """
+    :param m_samples: Number of samples taken.
+    :param k_neighbors: Number of neighbors of KNN PRM>
+    :param conn_rad: A possible 'effective connection radius' of the PRM>
+    :param dim: Dimension of configuration space.
+    :param vol_env:  Volume of configuration space.
+    :return: The log probability of conn_rad being an 'effective connection radius' of the PRM
+    (see Corollary 1 of the paper), as given by Hoeffding bound..
+    """
     measures_unit_sphere = compute_vol_unit_sphere(dim) / vol_env
     p_r_ball = measures_unit_sphere * (conn_rad ** dim)
     tail_val = k_neighbors / (m_samples - 1) - p_r_ball
@@ -152,6 +195,15 @@ def compute_tail_knn_radius_log_prob_hoeffding(m_samples, k_neighbors, conn_rad,
 
 
 def compute_tail_knn_radius_log_prob_hoeffding_mean_variant(m_samples, k_neighbors, conn_rad, dim, vol_env):
+    """
+    :param m_samples: Number of samples taken.
+    :param k_neighbors: Number of neighbors of KNN PRM>
+    :param conn_rad: A possible 'effective connection radius' of the PRM>
+    :param dim: Dimension of configuration space.
+    :param vol_env:  Volume of configuration space.
+    :return: The log probability of conn_rad being an 'effective connection radius' of the PRM
+    (see Corollary 1 of the paper), as given by an alternate statement of the Hoeffding bound.
+    """
     measures_unit_sphere = compute_vol_unit_sphere(dim) / vol_env
     p_r_ball = measures_unit_sphere * (conn_rad ** dim)
     tail_val = k_neighbors / (m_samples - 1) / p_r_ball - 1
@@ -165,6 +217,15 @@ def compute_tail_knn_radius_log_prob_hoeffding_mean_variant(m_samples, k_neighbo
 
 
 def compute_tail_knn_radius_log_prob_chernoff_generic(m_samples, k_neighbors, conn_rad, dim, vol_env):
+    """
+    :param m_samples: Number of samples taken.
+    :param k_neighbors: Number of neighbors of KNN PRM>
+    :param conn_rad: A possible 'effective connection radius' of the PRM>
+    :param dim: Dimension of configuration space.
+    :param vol_env:  Volume of configuration space.
+    :return: The log probability of conn_rad being an 'effective connection radius' of the PRM
+    (see Corollary 1 of the paper), as given by a common upper-bound of the Chernoff bound.
+    """
     measures_unit_sphere = compute_vol_unit_sphere(dim) / vol_env
     p_r_ball = np.minimum(measures_unit_sphere * (conn_rad ** dim), 1.0)
     mu = (m_samples - 1) * p_r_ball
@@ -176,6 +237,16 @@ def compute_tail_knn_radius_log_prob_chernoff_generic(m_samples, k_neighbors, co
 
 def compute_tail_knn_radius_log_prob_chernoff_kl(m_samples, k_neighbors, conn_rad, dim, vol_env,
                                                  enable_union_bound_factor=True):
+    """
+    :param m_samples: Number of samples taken.
+    :param k_neighbors: Number of neighbors of KNN PRM>
+    :param conn_rad: A possible 'effective connection radius' of the PRM>
+    :param dim: Dimension of configuration space.
+    :param vol_env:  Volume of configuration space.
+    :return: The log probability of conn_rad being an 'effective connection radius' of the PRM
+    (see Corollary 1 of the paper), as given by the tightest form of the Chernoff bound for Bernoulli random
+    variables.
+    """
     measures_unit_sphere = compute_vol_unit_sphere(dim) / vol_env
     p_r_ball = np.minimum(measures_unit_sphere * (conn_rad ** dim), 1.0)
     tail_val = np.maximum(k_neighbors / m_samples - p_r_ball, 0.0)
@@ -193,7 +264,9 @@ def compute_tail_knn_radius_log_prob_chernoff_kl(m_samples, k_neighbors, conn_ra
 
 def halving_radius_search_over_log_prob_bound(radius_to_log_prob, rad_lb, rad_ub, success_prob, tol=1e-6):
     """
-    Finds largest radius past the union bound hump.
+    Computes the largest connection radius possible between rad_lb and rad_ub, given a function that computes/bounds
+    the likelihood of an effective connection radius. For tightest results, use
+    `compute_tail_knn_radius_log_prob_chernoff_kl` as `radius_to_log_prob`.
     """
     assert rad_lb < rad_ub
     failure_prob = 1 - success_prob
@@ -217,12 +290,18 @@ def halving_radius_search_over_log_prob_bound(radius_to_log_prob, rad_lb, rad_ub
             rad_lb = test_rad
 
 def compute_eff_conn_rad_bound(m_samples, k_neighbors, dim, vol_env, failure_prob):
+    """
+    Computes the expression provided in Corollary 1.
+    """
     measure_unit_sphere = np.minimum(compute_vol_unit_sphere(dim) / vol_env, 1.0)
     numer = k_neighbors - np.sqrt(2 * k_neighbors * (np.log(m_samples) - np.log(failure_prob)))
     denom = (m_samples - 1) * measure_unit_sphere
     return math.pow(numer / denom, 1 / dim)
 
 def linear_radius_search_over_prob_bound(radius_to_prob, rad_lb, rad_ub, success_prob, tol=1e-6):
+    """
+    Deprecated.
+    """
     # Sanity check search
     failure_prob = 1 - success_prob
     rad = rad_lb

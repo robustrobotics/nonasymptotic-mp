@@ -324,8 +324,8 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
     A K-NN PRM adapted to be a radius PRM. Radius thresholds are implemented by set_connection_radius(),
     and but will automatically be
     cleared when the PRM is grown. For us, the experiments turned out to be
-    more elegant if we took a full K-NN (as PyNNDescent would compute it) and then find the radius
-    where epsilon-delta completeness checks fail.
+    more elegant if we took a full K-NN (as PyNNDescent/Kgraph would compute it) and then find the radius
+    where path sufficiency checks fail.
     """
 
     def __init__(self, k_neighbors, motion_validity_checker, valid_state_sampler, sdf_to_path,
@@ -513,6 +513,10 @@ class SimpleNearestNeighborRadiusPRM(SimplePRM):
 class SimpleRadiusPRM(SimplePRM):
     def __init__(self, connection_rad, motion_validity_checker, valid_state_sampler, sdf_to_path,
                  max_k_connection_neighbors=512, seed=None, verbose=False):
+        """
+        This PRM constructs a KNN, and doubles K until every node is guaranteed to be connected to all nodes with
+        the specified connection radius.
+        """
         super().__init__(motion_validity_checker, valid_state_sampler, seed, verbose)
         self.d = valid_state_sampler().size  # dummy sample to compute dimension
 
@@ -722,4 +726,3 @@ if __name__ == '__main__':
     walls = GrayCodeWalls(2, 2, 0.1)
     prm = SimpleRadiusPRM(0.2, walls.is_motion_valid, walls.sample_from_env)
     prm.grow_to_n_samples(1000)
-    print('hi')
