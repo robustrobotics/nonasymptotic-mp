@@ -3,7 +3,7 @@
 The accompanying codebase for the publication "Towards Practical Finite Sample Bounds for Motion Planning in TAMP," by
 Seiji A Shaw, Aidan Curtis, Leslie Pack Kaelbling, Tomás Lozano-Pérez, and Nicholas Roy.
 
-# Quickstart
+## Quickstart
 
 To run the Task and Motion Planning experiments, see
 [the TAMP README.md](/exps/tamp_environment/README.md).
@@ -19,7 +19,7 @@ For examples for how to use the numerical bound computations, see
 
 
 
-# Installation
+## Installation
 
 This code was developed and verified to work for Python 3.8. 
 
@@ -43,7 +43,7 @@ Please refer to the [kgraph repo](https://github.com/aaalgo/kgraph) for an insta
 
 
   
-# Citation
+## Citation
 
 If this codebase was helpful to you, please consider citing our paper:
 ```text
