@@ -1,7 +1,7 @@
 # nonasymptotic-mp
 
 The accompanying codebase for the publication "Towards Practical Finite Sample Bounds for Motion Planning in TAMP," by
-Seiji A Shaw, Aidan Curtis, Leslie Pack Kaelbling, Tomás Lozano-Pérez, and Nicholas Roy.
+Seiji Shaw, Aidan Curtis, Leslie Pack Kaelbling, Tomás Lozano-Pérez, and Nicholas Roy.
 
 ## Quickstart
 
